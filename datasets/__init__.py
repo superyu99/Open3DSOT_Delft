@@ -2,12 +2,19 @@
 ___init__.py
 Created by zenn at 2021/7/18 15:50
 """
-from datasets import kitti, sampler, nuscenes_data, waymo_data
+from datasets import kitti, sampler, nuscenes_data, waymo_data, delft_lidar
 
 
 def get_dataset(config, type='train', **kwargs):
     if config.dataset == 'kitti':
         data = kitti.kittiDataset(path=config.path,
+                                  split=kwargs.get('split', 'train'),
+                                  category_name=config.category_name,
+                                  coordinate_mode=config.coordinate_mode,
+                                  preloading=config.preloading,
+                                  preload_offset=config.preload_offset if type != 'test' else -1)
+    elif config.dataset == 'delft':
+        data = delft_lidar.DelftLidarDataset(path=config.path,
                                   split=kwargs.get('split', 'train'),
                                   category_name=config.category_name,
                                   coordinate_mode=config.coordinate_mode,

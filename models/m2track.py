@@ -17,7 +17,7 @@ from torchmetrics import Accuracy
 class M2TRACK(base_model.MotionBaseModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
-        self.seg_acc = Accuracy(num_classes=2, average='none')
+        self.seg_acc = Accuracy(task='multiclass',num_classes=2, average='none')
 
         self.box_aware = getattr(config, 'box_aware', False)
         self.use_motion_cls = getattr(config, 'use_motion_cls', True)
@@ -60,7 +60,7 @@ class M2TRACK(base_model.MotionBaseModel):
                                                   nn.BatchNorm1d(128),
                                                   nn.ReLU(),
                                                   nn.Linear(128, 2))
-            self.motion_acc = Accuracy(num_classes=2, average='none')
+            self.motion_acc = Accuracy(task='multiclass',num_classes=2, average='none')
 
         self.motion_mlp = nn.Sequential(nn.Linear(256, 128),
                                         nn.BatchNorm1d(128),
