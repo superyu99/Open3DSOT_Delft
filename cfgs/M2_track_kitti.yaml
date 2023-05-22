@@ -1,6 +1,6 @@
 #data
 dataset: kitti
-path: #put data root here
+path: /workspace/mot/Open3DSOT/data/kitti
 category_name: Pedestrian # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2

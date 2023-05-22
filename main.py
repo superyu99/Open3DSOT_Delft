@@ -71,6 +71,7 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
+    train_data.__getitem__(0)
     val_data = get_dataset(cfg, type='test', split=cfg.val_split)
     train_loader = DataLoader(train_data, batch_size=cfg.batch_size, num_workers=cfg.workers, shuffle=True,drop_last=True,
                               pin_memory=True)
