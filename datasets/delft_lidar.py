@@ -461,12 +461,13 @@ class DelftLidarDataset(base_dataset.BaseDataset):
         frame = anno['frame']
         box = self.get_lidarbox(anno,frame)
         center = box[:3]
-        size = box[3:6]
-        ry = box[6] 
+        dx,dy,dz = box[3:6]
+        size = [dy,dx,dz]
+        ry = -box[6] 
 
         pc = PointCloud(self.get_lidar(frame).reshape(-1, 4).T)
         orientation = Quaternion(
-                axis=[0, 0, -1], radians=ry) * Quaternion(axis=[0, 0, -1], degrees=90)
+                axis=[0, 0, -1], radians=ry)
 
         bb = Box(center, size, orientation)
         pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset)
