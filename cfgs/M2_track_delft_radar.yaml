@@ -1,5 +1,5 @@
 #data
-dataset: delft
+dataset: delft_radar
 path: /workspace/mot/Open3DSOT/data/delft
 category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
@@ -10,9 +10,9 @@ coordinate_mode: velodyne
 up_axis: [ 0,0,1 ]
 preload_offset: 10
 data_limit_box: True
-train_split: tiny_train
-val_split: tiny_test
-test_split: tiny_test
+train_split: train
+val_split: test
+test_split: test
 train_type: train_motion
 num_candidates: 4
 motion_threshold: 0.15

@@ -229,6 +229,41 @@ class Box:
         :param wlh_factor: <float>. Multiply w, l, h by a factor to inflate or deflate the box.
         :return: <np.float: 3, 8>. First four corners are the ones facing forward.
             The last four are the ones facing backwards.
+
+        该函数返回的box点顺序生成lineset的方法：
+        vertices = bb.corners().T
+        第1个角点: 前，左，上
+        第2个角点: 前，右，上
+        第3个角点: 前，右，下
+        第4个角点: 前，左，下
+        第5个角点: 后，左，上
+        第6个角点: 后，右，上
+        第7个角点: 后，右，下
+        第8个角点: 后，左，下
+
+        lines = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
+        ]
+
+        # Create a LineSet from the vertices and lines
+        line_set = o3d.geometry.LineSet(
+            points=o3d.utility.Vector3dVector(vertices),
+            lines=o3d.utility.Vector2iVector(lines),
+        )
+
+
+        
         """
         w, l, h = self.wlh * wlh_factor
 
@@ -248,6 +283,7 @@ class Box:
         corners[2, :] = corners[2, :] + z
 
         return corners
+
 
     def bottom_corners(self):
         """

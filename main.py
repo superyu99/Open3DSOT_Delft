@@ -17,6 +17,10 @@ from torch.utils.data import DataLoader
 from datasets import get_dataset
 from models import get_model
 
+import vis_tool as vt
+from datasets.data_classes import PointCloud, Box
+from pyquaternion import Quaternion
+import numpy as np
 
 # os.environ["NCCL_DEBUG"] = "INFO"
 
@@ -71,7 +75,26 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
-    train_data.__getitem__(0)
+    for i in range(len(train_data)):
+        data = train_data.__getitem__(i)
+        center = data["box_label"][:3]
+        size = data["bbox_size"]
+        rotation = data["box_label"][3]
+        print(rotation)
+        orientation = Quaternion(
+                axis=[0, 0, 1], radians=rotation) 
+        box = Box(center,size,orientation)
+                
+
+        prev_center = data["box_label_prev"][:3]
+        prev_size = data["bbox_size"]
+        prev_rotation = data["box_label_prev"][3]
+        print(prev_rotation)
+        prev_orientation = Quaternion(
+                axis=[0, 0, 1], radians=prev_rotation) 
+        prev_box = Box(prev_center,prev_size,prev_orientation)
+
+        vt.show_scenes(hist_pointcloud=[data["points"]],bboxes=[box.corners().T],gt_bbox=[prev_box.corners().T])
     val_data = get_dataset(cfg, type='test', split=cfg.val_split)
     train_loader = DataLoader(train_data, batch_size=cfg.batch_size, num_workers=cfg.workers, shuffle=True,drop_last=True,
                               pin_memory=True)
@@ -87,6 +110,31 @@ if not cfg.test:
     trainer.fit(net, train_loader, val_loader)
 else:
     test_data = get_dataset(cfg, type='test', split=cfg.test_split)
+    # for i in range(len(test_data)):
+    #     data = test_data.__getitem__(i)
+    # for i in range(len(test_data)):
+    #     data = test_data.__getitem__(i)
+    #     for j in range(len(data)):
+    #         box = data[j]["3d_bbox"]
+    #         center = box.center
+    #         size = box.wlh
+    #         rotation = box.rotation_matrix[0][1]
+    #         print(rotation)
+    #         orientation = Quaternion(
+    #                 axis=[0, 0, -1], radians=rotation) 
+    #         box = Box(center,size,orientation)
+                    
+
+    #         # prev_center = data["box_label_prev"][:3]
+    #         # prev_size = data["bbox_size"]
+    #         # prev_rotation = data["box_label_prev"][3]
+    #         # print(prev_rotation)
+    #         # prev_orientation = Quaternion(
+    #         #         axis=[0, 0, 1], radians=prev_rotation) 
+    #         # prev_box = Box(prev_center,prev_size,prev_orientation)
+    #         print(data[j]["pc"].points.T.shape)
+
+    #         vt.show_scenes(hist_pointcloud=[data[j]["pc"].points.T],bboxes=[box.corners().T])
     test_loader = DataLoader(test_data, batch_size=1, num_workers=cfg.workers, collate_fn=lambda x: x, pin_memory=True)
 
     trainer = pl.Trainer(gpus=-1, accelerator='ddp', default_root_dir=cfg.log_dir,
