@@ -28,18 +28,93 @@
             "cwd": "${workspaceFolder}"
         },
         {
-            "name": "main_delft",
+            "name": "main_delft_lidar",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "args": [
                 "--cfg",
-                "cfgs/M2_track_delft.yaml",
+                "cfgs/M2_track_delft_lidar.yaml",
                 "--batch_size",
-                "8",
+                "16",
                 "--epoch",
-                "10"
+                "20"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "main_delft_radar",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_delft_radar.yaml",
+                "--batch_size",
+                "16",
+                "--epoch",
+                "20"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "test_delft_lidar",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_delft_lidar.yaml",
+                "--checkpoint",
+                "/workspace/mot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
+                "--test",
+              
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "test_delft_radar",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_delft_radar.yaml",
+                "--checkpoint",
+                "/workspace/mot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
+                "--test",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "test_kitti",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_kitti.yaml",
+                "--checkpoint",
+                "/workspace/mot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
+                "--test",
+              
             ],
             "env": {
                 "CUDA_VISIBLE_DEVICES": "0"

@@ -123,7 +123,7 @@ def transform_3dbox(box, trans_matrix):
     return transformed_box
 #---------------------utils end-------------------------------
 
-class DelftLidarDataset(base_dataset.BaseDataset):
+class DelftRadarDataset(base_dataset.BaseDataset):
     def __init__(self, path, split, category_name="Car", **kwargs):
         super().__init__(path, split, category_name, **kwargs)
         self.split = split
@@ -227,12 +227,12 @@ class DelftLidarDataset(base_dataset.BaseDataset):
         # 判断 judge if x and y are in the range
         for idx, row in tracklet_df.iterrows():
             frame = row['frame']
-            box = self.get_lidarbox(row,frame)
+            box = self.get_radarbox(row,frame)
             # #统计box信息
             # with open('./%s_all_box_stats.txt'%(str(self.class_names[0])), 'a+') as f:
             #     print(f"{box[0]},{box[1]},{box[2]}",file=f)
             corners = boxes_to_corners_3d(box.reshape(-1,7))
-            points = self.get_lidar(frame)
+            points = self.get_radar(frame)
             in_box_num = np.count_nonzero(in_hull(points,corners.reshape(-1,3)))
             if not x_limit[0] <= box[0] <= x_limit[1] or not y_limit[0] <= box[1] <= y_limit[1] or not z_limit[0] <= box[2] <= z_limit[1] or in_box_num < 5:  # 点数小于1，不参与训练
                 out_range_indices.append(idx) 
@@ -350,7 +350,7 @@ class DelftLidarDataset(base_dataset.BaseDataset):
                 seq_tracklet = seq_tracklet.reset_index(drop=True)  # 对每一个轨迹信息生成新的dataframe
                 # seq_tracklet被破开，现在seq_tracklet里面包含多个新的id了
                 if "TRAIN" in self.split.upper() or "TEST" in self.split.upper(): #只有训练集作特殊筛选
-                    seq_tracklet,_ = self.process_tracklets_V2(seq_tracklet,all_track_id,[-100,100],[-100,100],[-10,10],1) #1是最短序列长度
+                    seq_tracklet,_ = self.process_tracklets_V2(seq_tracklet,all_track_id,[0,25],[-4,4],[-10,10],1) #1是最短序列长度
                     if len(seq_tracklet) == 0: #空表就继续
                         continue
                     for new_id in seq_tracklet.track_id.unique(): #把这些破开的小轨迹按照原来的方式走流程
@@ -383,6 +383,37 @@ class DelftLidarDataset(base_dataset.BaseDataset):
             frames = [self._get_frame_from_anno(seq_annos[f_id]) for f_id in frame_ids] #这里认为frame_ids是每一个tracklet独有的，每个序列都是从0开始
 
         return frames
+    def get_radar(self,frame_id):
+        img_name = f"{frame_id:05d}"
+        frame_loader = FrameDataLoader(kitti_locations=self.DelftLocation,
+                             frame_number=img_name)
+        frame_transforms = FrameTransformMatrix(frame_loader)
+
+        if self.origin == 'camera':
+            transform_matrices = {
+                'camera': np.eye(4, dtype=float),
+                'lidar': frame_transforms.t_camera_lidar,
+                'radar': frame_transforms.t_camera_radar
+            }
+        elif self.origin == 'lidar':
+            transform_matrices = {
+                'camera': frame_transforms.t_lidar_camera,
+                'lidar': np.eye(4, dtype=float),
+                'radar': frame_transforms.t_lidar_radar
+            }
+        elif self.origin == 'radar':
+            transform_matrices = {
+                'camera': frame_transforms.t_radar_camera,
+                'lidar': frame_transforms.t_radar_lidar,
+                'radar': np.eye(4, dtype=float)
+            }
+        else:
+            raise ValueError("Origin must be camera, lidar or radar!")
+        
+        radar_points_in_origin = transform_pcl_with_all_feature(points=frame_loader.radar_data,
+                                                  transform_matrix=transform_matrices['radar'])
+        
+        return radar_points_in_origin
 
     def get_lidar(self,frame_id):
         img_name = f"{frame_id:05d}"
@@ -458,15 +489,57 @@ class DelftLidarDataset(base_dataset.BaseDataset):
 
         return transform_3dbox(box,transform_matrices["camera"])
 
+    def get_radarbox(self,label: pd.Series,frame) -> np.array:
+        # 解压数据
+        x = label['x']
+        y = label['y']
+        z = label['z']
+        height = label['height'] #坐标错位
+        width = label['width'] #坐标错位
+        length = label['length'] #坐标错位
+        ry = label['ry']
+
+        box = np.array([x,y,z,height,width,length,ry])
+
+        # 加载变换矩阵
+        frame_loader = FrameDataLoader(kitti_locations=self.DelftLocation,
+                                       frame_number=f"{frame:05d}")
+        frame_transforms = FrameTransformMatrix(frame_loader)  # 用于处理label
+
+        if self.origin == 'camera':
+            transform_matrices = {
+                'camera': np.eye(4, dtype=float),
+                'lidar': frame_transforms.t_camera_lidar,
+                'radar': frame_transforms.t_camera_radar
+            }
+        elif self.origin == 'lidar':
+            transform_matrices = {
+                'camera': frame_transforms.t_lidar_camera,
+                'lidar': np.eye(4, dtype=float),
+                'radar': frame_transforms.t_lidar_radar
+            }
+        elif self.origin == 'radar':
+            transform_matrices = {
+                'camera': frame_transforms.t_radar_camera,
+                'lidar': frame_transforms.t_radar_lidar,
+                'radar': np.eye(4, dtype=float)
+            }
+        else:
+            raise ValueError("Origin must be camera, lidar or radar!")
+
+       
+
+        return transform_3dbox(box,transform_matrices["camera"])
+
     def _get_frame_from_anno(self, anno):
         frame = anno['frame']
-        box = self.get_lidarbox(anno,frame)
+        box = self.get_radarbox(anno,frame)
         center = box[:3]
         dx,dy,dz = box[3:6]
         size = [dy,dx,dz]
         ry = -box[6] 
 
-        pc = PointCloud(self.get_lidar(frame).reshape(-1, 4).T)
+        pc = PointCloud(self.get_radar(frame).reshape(-1, 7).T)
         orientation = Quaternion(
                 axis=[0, 0, -1], radians=ry)
 

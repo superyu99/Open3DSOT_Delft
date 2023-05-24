@@ -42,7 +42,7 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError
 
     def evaluate_one_sample(self, data_dict, ref_box):
-        end_points = self(data_dict)
+        end_points = self(data_dict) #调用模型，获得结果
 
         estimation_box = end_points['estimation_boxes']
         estimation_box_cpu = estimation_box.squeeze(0).detach().cpu().numpy()

@@ -1,6 +1,6 @@
 #data
-dataset: kitti
-path: /workspace/mot/Open3DSOT/data/kitti
+dataset: delft_lidar
+path: /workspace/mot/Open3DSOT/data/delft
 category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
