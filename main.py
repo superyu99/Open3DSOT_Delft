@@ -139,6 +139,6 @@ else:
     #         vt.show_scenes(hist_pointcloud=[data[j]["pc"].points.T],bboxes=[box.corners().T])
     test_loader = DataLoader(test_data, batch_size=1, num_workers=cfg.workers, collate_fn=lambda x: x, pin_memory=True)
 
-    trainer = pl.Trainer(gpus=-1, accelerator='ddp', default_root_dir=cfg.log_dir,
+    trainer = pl.Trainer(devices=-1, accelerator='auto', default_root_dir=cfg.log_dir,
                          resume_from_checkpoint=cfg.checkpoint)
     trainer.test(net, test_loader)
