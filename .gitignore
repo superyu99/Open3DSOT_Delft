@@ -4,3 +4,5 @@
 *.pyc
 events.*
 lightning_logs
+lightning
+data

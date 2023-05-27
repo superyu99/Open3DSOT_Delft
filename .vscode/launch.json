@@ -18,9 +18,9 @@
                 "--cfg",
                 "cfgs/M2_track_kitti.yaml",
                 "--batch_size",
-                "1",
+                "64",
                 "--epoch",
-                "1"
+                "80"
             ],
             "env": {
                 "CUDA_VISIBLE_DEVICES": "0"
