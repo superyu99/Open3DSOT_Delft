@@ -1,6 +1,6 @@
 #data
 dataset: kitti
-path: /workspace/mot/Open3DSOT/data/kitti
+path: /data/public_dataset/kitti_tracking/tracking
 category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
@@ -38,7 +38,7 @@ IoU_space: 3
 
 #training
 batch_size: 100
-workers: 10
+workers: 16
 epoch: 180
 from_epoch: 0
 lr: 0.001

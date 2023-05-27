@@ -1,7 +1,7 @@
 #data
 dataset: delft_radar
-path: /workspace/mot/Open3DSOT/data/delft
-category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
+path: /data/public_dataset/delft/view_of_delft_PUBLIC
+category_name: Pedestrian # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
 point_sample_size: 1024
@@ -38,7 +38,7 @@ IoU_space: 3
 
 #training
 batch_size: 100
-workers: 10
+workers: 16
 epoch: 180
 from_epoch: 0
 lr: 0.001

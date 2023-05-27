@@ -151,8 +151,8 @@ class DelftRadarDataset(base_dataset.BaseDataset):
             if "TINY" in split.upper():
                 scene_names = list(range(8, 9))  # tiny 片段1，298帧
             else:
-                # scene_names = list(range(0, 7))   # origin
-                scene_names = list(range(7, 11)) #val 有标签
+                scene_names = list(range(0, 7))   # origin
+                # scene_names = list(range(7, 11)) #val 有标签
         elif "VALID" in split.upper():  # Validation Set
             if "TINY" in split.upper():
                 scene_names = list(range(8, 9))  # tiny 片段1，298帧
@@ -234,7 +234,7 @@ class DelftRadarDataset(base_dataset.BaseDataset):
             corners = boxes_to_corners_3d(box.reshape(-1,7))
             points = self.get_radar(frame)
             in_box_num = np.count_nonzero(in_hull(points,corners.reshape(-1,3)))
-            if not x_limit[0] <= box[0] <= x_limit[1] or not y_limit[0] <= box[1] <= y_limit[1] or not z_limit[0] <= box[2] <= z_limit[1] or in_box_num < 5:  # 点数小于1，不参与训练
+            if not x_limit[0] <= box[0] <= x_limit[1] or not y_limit[0] <= box[1] <= y_limit[1] or not z_limit[0] <= box[2] <= z_limit[1] or in_box_num < 1:  # 点数小于1，不参与训练
                 out_range_indices.append(idx) 
                 # if platform_utils.USE_COMPUTER & True:
                 #     vt.show_scenes(
@@ -349,8 +349,8 @@ class DelftRadarDataset(base_dataset.BaseDataset):
                 # attention! 是不是应该按照帧序号排序？
                 seq_tracklet = seq_tracklet.reset_index(drop=True)  # 对每一个轨迹信息生成新的dataframe
                 # seq_tracklet被破开，现在seq_tracklet里面包含多个新的id了
-                if "TRAIN" in self.split.upper() or "TEST" in self.split.upper(): #只有训练集作特殊筛选
-                    seq_tracklet,_ = self.process_tracklets_V2(seq_tracklet,all_track_id,[0,25],[-4,4],[-10,10],1) #1是最短序列长度
+                if "TRAIN" in self.split.upper(): #只有训练集作特殊筛选
+                    seq_tracklet,_ = self.process_tracklets_V2(seq_tracklet,all_track_id,[-100,100],[-100,100],[-100,100],1) #1是最短序列长度
                     if len(seq_tracklet) == 0: #空表就继续
                         continue
                     for new_id in seq_tracklet.track_id.unique(): #把这些破开的小轨迹按照原来的方式走流程

@@ -151,8 +151,8 @@ class DelftLidarDataset(base_dataset.BaseDataset):
             if "TINY" in split.upper():
                 scene_names = list(range(8, 9))  # tiny 片段1，298帧
             else:
-                # scene_names = list(range(0, 7))   # origin
-                scene_names = list(range(7, 11)) #val 有标签
+                scene_names = list(range(0, 7))   # origin
+                # scene_names = list(range(7, 11)) #val 有标签
         elif "VALID" in split.upper():  # Validation Set
             if "TINY" in split.upper():
                 scene_names = list(range(8, 9))  # tiny 片段1，298帧
@@ -349,7 +349,7 @@ class DelftLidarDataset(base_dataset.BaseDataset):
                 # attention! 是不是应该按照帧序号排序？
                 seq_tracklet = seq_tracklet.reset_index(drop=True)  # 对每一个轨迹信息生成新的dataframe
                 # seq_tracklet被破开，现在seq_tracklet里面包含多个新的id了
-                if "TRAIN" in self.split.upper() or "TEST" in self.split.upper(): #只有训练集作特殊筛选
+                if "TRAIN" in self.split.upper() : #只有训练集作特殊筛选
                     seq_tracklet,_ = self.process_tracklets_V2(seq_tracklet,all_track_id,[-100,100],[-100,100],[-10,10],1) #1是最短序列长度
                     if len(seq_tracklet) == 0: #空表就继续
                         continue
