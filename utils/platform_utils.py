@@ -8,4 +8,4 @@ if COMPUTER in ip_address:
 else:
     USE_COMPUTER =False
 
-
+WATCH = False #控制在本地想不想看

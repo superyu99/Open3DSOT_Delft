@@ -95,8 +95,8 @@ def motion_processing(data, config, template_transform=None, search_transform=No
     prev_pc, prev_box = prev_frame['pc'], prev_frame['3d_bbox']
     this_pc, this_box = this_frame['pc'], this_frame['3d_bbox']
 
-    num_points_in_prev_box = geometry_utils.points_in_box(prev_box, prev_pc.points).sum()
-    assert num_points_in_prev_box > 10, 'not enough target points'
+    num_points_in_prev_box = geometry_utils.points_in_box(prev_box, prev_pc.points[0:3,:]).sum() #应当只考虑点的xyz特征
+    assert num_points_in_prev_box > config.limit_num_points_in_prev_box, 'not enough target points'
 
     if template_transform is not None:
         prev_pc, prev_box = template_transform(prev_pc, prev_box)
@@ -117,19 +117,19 @@ def motion_processing(data, config, template_transform=None, search_transform=No
     this_frame_pc = points_utils.generate_subwindow(this_pc, ref_box,
                                                     scale=config.bb_scale,
                                                     offset=config.bb_offset)
-    assert this_frame_pc.nbr_points() > 20, 'not enough search points'
+    assert this_frame_pc.nbr_points() > config.limit_num_this_frame_subwindow_pc, 'not enough search points'
 
     this_box = points_utils.transform_box(this_box, ref_box)
     prev_box = points_utils.transform_box(prev_box, ref_box)
     ref_box = points_utils.transform_box(ref_box, ref_box)
     motion_box = points_utils.transform_box(this_box, prev_box)
 
-    prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T, config.point_sample_size)
-    this_points, idx_this = points_utils.regularize_pc(this_frame_pc.points.T, config.point_sample_size)
+    prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T, config.point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
+    this_points, idx_this = points_utils.regularize_pc(this_frame_pc.points.T, config.point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
 
-    seg_label_this = geometry_utils.points_in_box(this_box, this_points.T, 1.25).astype(int)
-    seg_label_prev = geometry_utils.points_in_box(prev_box, prev_points.T, 1.25).astype(int)
-    seg_mask_prev = geometry_utils.points_in_box(ref_box, prev_points.T, 1.25).astype(float)
+    seg_label_this = geometry_utils.points_in_box(this_box, this_points.T[:3,:], 1.25).astype(int) #应当只考虑xyz特征
+    seg_label_prev = geometry_utils.points_in_box(prev_box, prev_points.T[:3,:], 1.25).astype(int) #应当只考虑xyz特征
+    seg_mask_prev = geometry_utils.points_in_box(ref_box, prev_points.T[:3,:], 1.25).astype(float) #应当只考虑xyz特征
     if candidate_id != 0:
         # Here we use 0.2/0.8 instead of 0/1 to indicate that the previous box is not GT.
         # When boxcloud is used, the actual value of prior-targetness mask doesn't really matter.

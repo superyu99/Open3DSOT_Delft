@@ -7,6 +7,129 @@ import torch
 import numpy as np
 from pyquaternion import Quaternion
 
+class RadarCloud: #这个类喜欢使用转置之后的格式对待点云
+
+    def __init__(self, points):
+        """
+        Class for manipulating and viewing point clouds.
+        :param points: <np.float: feature_num, n>. Input point cloud matrix.
+        """
+        #all ['x', 'y', 'z', 'RCS','v_r','v_r_compensated','time'],
+        #used['x', 'y', 'z', 'RCS','v_r','v_r_compensated'],
+        usedfeature_index = [0,1,2,3,4,5]
+
+        self.points = points
+        self.points = self.points[usedfeature_index, :] #根据要使用的featureindex提取要用的那些特征
+
+    # 不应当在delft_radar出现
+    # @staticmethod
+    # def load_pcd_bin(file_name):
+    #     """
+    #     Loads from binary format. Data is stored as (x, y, z, intensity, ring index).
+    #     :param file_name: <str>.
+    #     :return: <np.float: 4, n>. Point cloud matrix (x, y, z, intensity).
+    #     """
+    #     scan = np.fromfile(file_name, dtype=np.float32)
+    #     points = scan.reshape((-1, 5))[:, :4]
+    #     return points.T
+
+    # 不应当在delft_radar出现
+    # @classmethod
+    # def from_file(cls, file_name):
+    #     """
+    #     Instantiate from a .pcl, .pdc, .npy, or .bin file.
+    #     :param file_name: <str>. Path of the pointcloud file on disk.
+    #     :return: <PointCloud>.
+    #     """
+
+    #     if file_name.endswith('.bin'):
+    #         points = cls.load_pcd_bin(file_name)
+    #     elif file_name.endswith('.npy'):
+    #         points = np.load(file_name)
+    #     else:
+    #         raise ValueError('Unsupported filetype {}'.format(file_name))
+
+    #     return cls(points)
+
+    def nbr_points(self):
+        """
+        Returns the number of points.
+        :return: <int>. Number of points.
+        """
+        return self.points.shape[1]
+
+    def subsample(self, ratio):
+        """
+        Sub-samples the pointcloud.
+        :param ratio: <float>. Fraction to keep.
+        :return: <None>.
+        """
+        selected_ind = np.random.choice(np.arange(0, self.nbr_points()),
+                                        size=int(self.nbr_points() * ratio))
+        self.points = self.points[:, selected_ind]
+
+    def remove_close(self, radius): #本操作不影响其他特征
+        """
+        Removes point too close within a certain radius from origin.
+        :param radius: <float>.
+        :return: <None>.
+        """
+
+        x_filt = np.abs(self.points[0, :]) < radius
+        y_filt = np.abs(self.points[1, :]) < radius
+        not_close = np.logical_not(np.logical_and(x_filt, y_filt))
+        self.points = self.points[:, not_close] 
+
+    def translate(self, x): #本操作不影响其他特征
+        """
+        Applies a translation to the point cloud.
+        :param x: <np.float: 3, 1>. Translation in x, y, z.
+        :return: <None>.
+        """
+        for i in range(3):
+            self.points[i, :] = self.points[i, :] + x[i]
+
+    def rotate(self, rot_matrix): #本操作不影响其他特征
+        """
+        Applies a rotation.
+        :param rot_matrix: <np.float: 3, 3>. Rotation matrix.
+        :return: <None>.
+        """
+        self.points[:3, :] = np.dot(rot_matrix, self.points[:3, :])
+
+    def transform(self, transf_matrix): #本操作不影响其他特征
+        """
+        Applies a homogeneous transform.
+        :param transf_matrix: <np.float: 4, 4>. Homogenous transformation matrix.
+        :return: <None>.
+        """
+        self.points[:3, :] = transf_matrix.dot(
+            np.vstack((self.points[:3, :], np.ones(self.nbr_points()))))[:3, :]
+
+    def convertToPytorch(self): #本操作不影响其他特征
+        """
+        Helper from pytorch.
+        :return: Pytorch array of points.
+        """
+        return torch.from_numpy(self.points)
+
+    @staticmethod
+    def fromPytorch(cls, pytorchTensor):
+        """
+        Loads from binary format. Data is stored as (x, y, z, intensity, ring index).
+        :param pyttorchTensor: <Tensor>.
+        :return: <np.float: 4, n>. Point cloud matrix (x, y, z, intensity).
+        """
+        points = pytorchTensor.numpy()
+        # points = points.reshape((-1, 5))[:, :4]
+        return cls(points)
+
+    def normalize(self, wlh):
+        # 这里调整了顺，是因为此处的wlh是dy：宽度，dx长度，dz：高度，
+        # 这个wlh不应当被理解为label里的box的wlh，可以理解为定义的点云的最大范围
+        normalizer = [wlh[1], wlh[0], wlh[2]] 
+        self.points = self.points / np.atleast_2d(normalizer).T
+
 
 class PointCloud:
 

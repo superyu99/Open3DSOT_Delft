@@ -18,9 +18,9 @@
                 "--cfg",
                 "cfgs/M2_track_kitti.yaml",
                 "--batch_size",
-                "64",
+                "2",
                 "--epoch",
-                "80"
+                "1"
             ],
             "env": {
                 "CUDA_VISIBLE_DEVICES": "0"
@@ -56,9 +56,10 @@
                 "--cfg",
                 "cfgs/M2_track_delft_radar.yaml",
                 "--batch_size",
-                "16",
+                "2",
                 "--epoch",
-                "20"
+                "20",
+                // "--test",
             ],
             "env": {
                 "CUDA_VISIBLE_DEVICES": "0"

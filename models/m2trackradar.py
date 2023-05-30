@@ -14,7 +14,7 @@ from utils.metrics import estimateOverlap, estimateAccuracy
 from torchmetrics import Accuracy
 
 
-class M2TRACK(base_model.MotionBaseModel):
+class M2TRACKRADAR(base_model.MotionBaseModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.seg_acc = Accuracy(task='multiclass',num_classes=2, average='none')
@@ -23,11 +23,20 @@ class M2TRACK(base_model.MotionBaseModel):
         self.use_motion_cls = getattr(config, 'use_motion_cls', True)
         self.use_second_stage = getattr(config, 'use_second_stage', True)
         self.use_prev_refinement = getattr(config, 'use_prev_refinement', True)
-        self.seg_pointnet = SegPointNet(input_channel=3 + 1 + 1 + (9 if self.box_aware else 0),
+        #3 + 3 + 1 + 1 解释：
+        # 3：xyz
+        # 3：其他特征
+        # 1：时间戳
+        # 1：概率
+        self.seg_pointnet = SegPointNet(input_channel=3 + 3 + 1 + 1 + (9 if self.box_aware else 0), #此处注意输入维度
                                         per_point_mlp1=[64, 64, 64, 128, 1024],
                                         per_point_mlp2=[512, 256, 128, 128],
                                         output_size=2 + (9 if self.box_aware else 0))
-        self.mini_pointnet = MiniPointNet(input_channel=3 + 1 + (9 if self.box_aware else 0),
+        #3 + 3 + 1 解释：
+        # 3：xyz
+        # 3：其他特征
+        # 1：时间戳
+        self.mini_pointnet = MiniPointNet(input_channel=3 + 3 + 1 + (9 if self.box_aware else 0), ##此处注意输入维度
                                           per_point_mlp=[64, 128, 256, 512],
                                           hidden_mlp=[512, 256],
                                           output_size=-1)
@@ -83,17 +92,19 @@ class M2TRACK(base_model.MotionBaseModel):
 
         """
         output_dict = {}
-        x = input_dict["points"].transpose(1, 2) # torch.Size([1, 5, 2048])
+        x = input_dict["points"].transpose(1, 2)
         if self.box_aware:
-            candidate_bc = input_dict["candidate_bc"].transpose(1, 2) #torch.Size([1, 9, 2048])
-            x = torch.cat([x, candidate_bc], dim=1) #torch.Size([1, 14, 2048]) 3+2+9
+            candidate_bc = input_dict["candidate_bc"].transpose(1, 2)
+            x = torch.cat([x, candidate_bc], dim=1)
 
         B, _, N = x.shape
 
-        seg_out = self.seg_pointnet(x) #torch.Size([1, 11, 2048])
+        seg_out = self.seg_pointnet(x)
         seg_logits = seg_out[:, :2, :]  # B,2,N
         pred_cls = torch.argmax(seg_logits, dim=1, keepdim=True)  # B,1,N
-        mask_points = x[:, :4, :] * pred_cls #只拿了前4维数据，并且直接乘上概率 前4维数据的含义：x,y,z,time_stamp
+        # 7 的解释，3+3+1 3：xyz， 3：其他特征 1：时间戳
+        # 4 的解释，3+1 3：xyz，  1：时间戳
+        mask_points = x[:, :7, :] * pred_cls #此处注意维度，输入多了3个维度
         mask_xyz_t0 = mask_points[:, :3, :N // 2]  # B,3,N//2
         mask_xyz_t1 = mask_points[:, :3, N // 2:]
         if self.box_aware:

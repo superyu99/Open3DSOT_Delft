@@ -1,10 +1,11 @@
 #data
 dataset: delft_radar
 path: /data/public_dataset/delft/view_of_delft_PUBLIC
-category_name: Pedestrian # [Car, Van, Pedestrian, Cyclist, All]
+# path: /DISK_F/view_of_delft_PUBLIC
+category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
-point_sample_size: 1024
+point_sample_size: 512
 degrees: False
 coordinate_mode: velodyne
 up_axis: [ 0,0,1 ]
@@ -17,10 +18,12 @@ train_type: train_motion
 num_candidates: 4
 motion_threshold: 0.15
 use_augmentation: True
+limit_num_points_in_prev_box: 1 #motion_prosessing函数里面的对前一帧box里面的点的数量限制，少于这个数量则放弃该帧，会去取其他帧
+limit_num_this_frame_subwindow_pc: 1 #motion_prosessing函数里面的对这一帧subwindow的点的数量限制，少于这个数量则放弃该帧，会去取其他帧
 
 
 #model configuration
-net_model: m2track
+net_model: m2trackradar
 box_aware: True
 
 #loss configuration

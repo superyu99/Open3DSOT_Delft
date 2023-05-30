@@ -24,6 +24,7 @@ def random_choice(num_samples, size, replacement=False, seed=None):
 def regularize_pc(points, sample_size, seed=None):
     # random sampling from points
     num_points = points.shape[0]
+    num_feature = points.shape[1]
     new_pts_idx = None
     rng = np.random if seed is None else np.random.default_rng(seed)
     if num_points > 2:
@@ -36,7 +37,8 @@ def regularize_pc(points, sample_size, seed=None):
     if new_pts_idx is not None:
         points = points[new_pts_idx, :]
     else:
-        points = np.zeros((sample_size, 3), dtype='float32')
+        points = np.zeros((sample_size, num_feature), dtype='float32') #生成的新点的维度要等于输入的点云的特征维度
+
     return points, new_pts_idx
 
 
@@ -165,7 +167,9 @@ def crop_pc_axis_aligned(PC, box, offset=0, scale=1.0, return_mask=False):
     close = np.logical_and(close, z_filt_min)
     close = np.logical_and(close, z_filt_max)
 
-    new_PC = PointCloud(PC.points[:, close])
+    # new_PC = PointCloud(PC.points[:, close]) #原版实现
+    new_PC = copy.deepcopy(PC)
+    new_PC.points = PC.points[:, close] #我的实现，兼容纯点云
     if return_mask:
         return new_PC, close
     return new_PC
@@ -229,7 +233,9 @@ def generate_subwindow(pc, sample_bb, scale, offset=2, oriented=True):
     rot_mat = np.transpose(sample_bb.rotation_matrix)
     trans = -sample_bb.center
     if oriented:
-        new_pc = PointCloud(pc.points.copy())
+        # new_pc = PointCloud(pc.points.copy()) #原版实现
+        new_pc = copy.deepcopy(pc) #我的实现，兼容纯点云
+
         box_tmp = copy.deepcopy(sample_bb)
 
         # transform to the coordinate system of sample_bb
@@ -346,9 +352,12 @@ def apply_transform(in_box_pc, box, translation, rotation, flip_x, flip_y, rotat
 
 
 def apply_augmentation(pc, box, wlh_factor=1.25):
-    in_box_mask = nuscenes.utils.geometry_utils.points_in_box(box, pc.points, wlh_factor=wlh_factor)
+    in_box_mask = nuscenes.utils.geometry_utils.points_in_box(box, pc.points[0:3,:], wlh_factor=wlh_factor) #应当只考虑前三个维度
     # in_box_mask = get_in_box_mask(pc, box)
-    in_box_pc = PointCloud(pc.points[:, in_box_mask])
+    # in_box_pc = PointCloud(pc.points[:, in_box_mask]) #原版实现，此处inboxpc只有xyz特征了
+
+    in_box_pc = copy.deepcopy(pc) #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
+    in_box_pc.points = pc.points[:, in_box_mask] #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
 
     rand_trans = np.random.uniform(low=-0.3, high=0.3, size=3)
     rand_rot = np.random.uniform(low=-10, high=10)
