@@ -114,7 +114,7 @@ class BaseModel(pl.LightningModule):
         self.log('precision/test', self.prec, on_step=True, on_epoch=True)
         return result_bbs
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self):
         self.logger.experiment.add_scalars('metrics/test',
                                            {'success': self.success.compute(),
                                             'precision': self.prec.compute()},
