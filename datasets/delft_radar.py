@@ -4,7 +4,7 @@ import copy
 import random
 
 from torch.utils.data import Dataset
-from datasets.data_classes import PointCloud, Box
+from datasets.data_classes import RadarCloud, Box
 from pyquaternion import Quaternion
 import numpy as np
 import pandas as pd
@@ -539,7 +539,7 @@ class DelftRadarDataset(base_dataset.BaseDataset):
         size = [dy,dx,dz]
         ry = -box[6] 
 
-        pc = PointCloud(self.get_radar(frame).reshape(-1, 7).T)
+        pc = RadarCloud(self.get_radar(frame).reshape(-1, 7).T)
         orientation = Quaternion(
                 axis=[0, 0, -1], radians=ry)
 

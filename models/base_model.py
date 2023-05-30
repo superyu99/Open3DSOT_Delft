@@ -74,8 +74,12 @@ class BaseModel(pl.LightningModule):
                 # construct input dict
                 data_dict, ref_bb = self.build_input_dict(sequence, frame_id, results_bbs)
                 # run the tracker
-                candidate_box = self.evaluate_one_sample(data_dict, ref_box=ref_bb)
-                results_bbs.append(candidate_box)
+                if torch.sum(data_dict['points'][:,:,:3]) == 0:
+                    results_bbs.append(ref_bb)
+                    print("Empty pointcloud!")
+                else:
+                    candidate_box = self.evaluate_one_sample(data_dict, ref_box=ref_bb)
+                    results_bbs.append(candidate_box)
 
             this_overlap = estimateOverlap(this_bb, results_bbs[-1], dim=self.config.IoU_space,
                                            up_axis=self.config.up_axis)
@@ -252,7 +256,7 @@ class MotionBaseModel(BaseModel):
         super().__init__(config, **kwargs)
         self.save_hyperparameters()
 
-    def build_input_dict(self, sequence, frame_id, results_bbs):
+    def build_input_dict(self, sequence, frame_id, results_bbs): #注意：可能会有空点云输入
         assert frame_id > 0, "no need to construct an input_dict at frame 0"
 
         prev_frame = sequence[frame_id - 1]
@@ -268,14 +272,14 @@ class MotionBaseModel(BaseModel):
                                                         offset=self.config.bb_offset)
 
         canonical_box = points_utils.transform_box(ref_box, ref_box)
-        prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T,
+        prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T, 
                                                            self.config.point_sample_size,
-                                                           seed=1)
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
 
         this_points, idx_this = points_utils.regularize_pc(this_frame_pc.points.T,
                                                            self.config.point_sample_size,
-                                                           seed=1)
-        seg_mask_prev = geometry_utils.points_in_box(canonical_box, prev_points.T, 1.25).astype(float)
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+        seg_mask_prev = geometry_utils.points_in_box(canonical_box, prev_points.T[:3,:], 1.25).astype(float)
 
         # Here we use 0.2/0.8 instead of 0/1 to indicate that the previous box is not GT.
         # When boxcloud is used, the actual value of prior-targetness mask doesn't really matter.
@@ -288,7 +292,7 @@ class MotionBaseModel(BaseModel):
         timestamp_this = np.full((self.config.point_sample_size, 1), fill_value=0.1)
         prev_points = np.concatenate([prev_points, timestamp_prev, seg_mask_prev[:, None]], axis=-1)
         this_points = np.concatenate([this_points, timestamp_this, seg_mask_this[:, None]], axis=-1)
-
+        
         stack_points = np.concatenate([prev_points, this_points], axis=0)
 
         data_dict = {"points": torch.tensor(stack_points[None, :], device=self.device, dtype=torch.float32),

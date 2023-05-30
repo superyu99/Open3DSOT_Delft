@@ -18,7 +18,7 @@ from datasets import get_dataset
 from models import get_model
 
 # import vis_tool as vt
-from datasets.data_classes import PointCloud, Box
+from datasets.data_classes import Box
 from pyquaternion import Quaternion
 import numpy as np
 
@@ -40,7 +40,7 @@ def parse_config():
     parser.add_argument('--batch_size', type=int, default=100, help='input batch size')
     parser.add_argument('--epoch', type=int, default=60, help='number of epochs')
     parser.add_argument('--save_top_k', type=int, default=-1, help='save top k checkpoints')
-    parser.add_argument('--check_val_every_n_epoch', type=int, default=5, help='check_val_every_n_epoch')
+    parser.add_argument('--check_val_every_n_epoch', type=int, default=1, help='check_val_every_n_epoch')
     parser.add_argument('--workers', type=int, default=10, help='number of data loading workers')
     parser.add_argument('--cfg', type=str, help='the config_file')
     parser.add_argument('--checkpoint', type=str, default=None, help='checkpoint location')
@@ -112,8 +112,8 @@ if not cfg.test:
     trainer.fit(net, train_loader, val_loader, ckpt_path=cfg.checkpoint)
 else:
     test_data = get_dataset(cfg, type='test', split=cfg.test_split)
-    # for i in range(len(test_data)):
-    #     data = test_data.__getitem__(i)
+    for i in range(len(test_data)):
+        data = test_data.__getitem__(i)
     # for i in range(len(test_data)):
     #     data = test_data.__getitem__(i)
     #     for j in range(len(data)):
