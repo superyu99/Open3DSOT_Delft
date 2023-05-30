@@ -22,7 +22,7 @@ from datasets.data_classes import Box
 from pyquaternion import Quaternion
 import numpy as np
 
-torch.set_float32_matmul_precision("medium")
+torch.set_float32_matmul_precision("high")
 
 # os.environ["NCCL_DEBUG"] = "INFO"
 
