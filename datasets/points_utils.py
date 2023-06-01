@@ -43,15 +43,16 @@ def regularize_pc(points, sample_size, seed=None):
 
 
 def getOffsetBB(box, offset, degrees=True, use_z=False, limit_box=True, inplace=False):
-    rot_quat = Quaternion(matrix=box.rotation_matrix)
-    trans = np.array(box.center)
+    #box是上一帧的box，也称为refbox；offset指的是预测的box，处于refbox为中心的局部坐标系里
+    rot_quat = Quaternion(matrix=box.rotation_matrix) #记录refbox的角度
+    trans = np.array(box.center) #记录refbox的中心
     if not inplace:
         new_box = copy.deepcopy(box)
     else:
         new_box = box
 
-    new_box.translate(-trans)
-    new_box.rotate(rot_quat.inverse)
+    new_box.translate(-trans) #
+    new_box.rotate(rot_quat.inverse) #消除newbox的角度
     if len(offset) == 3:
         use_z = False
     # REMOVE TRANSfORM
@@ -69,7 +70,7 @@ def getOffsetBB(box, offset, degrees=True, use_z=False, limit_box=True, inplace=
         elif len(offset) == 4:
             new_box.rotate(
                 Quaternion(axis=[0, 0, 1], radians=offset[3]))
-    if limit_box:
+    if limit_box: #对预测值作限制？这样的话，不会让box突然飘很远，还有找回来的希望！
         if offset[0] > new_box.wlh[0]:
             offset[0] = np.random.uniform(-1, 1)
         if offset[1] > min(new_box.wlh[1], 2):
@@ -84,7 +85,7 @@ def getOffsetBB(box, offset, degrees=True, use_z=False, limit_box=True, inplace=
     # APPLY PREVIOUS TRANSFORMATION
     new_box.rotate(rot_quat)
     new_box.translate(trans)
-    return new_box
+    return new_box #把局部转到全局
 
 
 def getModel(PCs, boxes, offset=0, scale=1.0, normalize=False):
@@ -141,6 +142,9 @@ def get_point_to_box_distance(pc, box, wlh_factor=1.0):
     box_corners = box.corners(wlh_factor=wlh_factor)  # 3,8
     box_centers = box.center.reshape(-1, 1)  # 3,1
     box_points = np.concatenate([box_centers, box_corners], axis=1)  # 3,9
+    # if np.sum(points) == 0: #如果box为空，就把box的中心编码进去
+    #     points2cc_dist = cdist(box_centers.reshape(1,3), box_points.T)  # N,9
+    # else:
     points2cc_dist = cdist(points, box_points.T)  # N,9
     return points2cc_dist
 

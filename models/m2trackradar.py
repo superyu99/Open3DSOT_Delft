@@ -92,34 +92,34 @@ class M2TRACKRADAR(base_model.MotionBaseModel):
 
         """
         output_dict = {}
-        x = input_dict["points"].transpose(1, 2)
+        x = input_dict["points"].transpose(1, 2) #torch.Size([1, 1024, 8])
         if self.box_aware:
-            candidate_bc = input_dict["candidate_bc"].transpose(1, 2)
+            candidate_bc = input_dict["candidate_bc"].transpose(1, 2) #box角点到每个点的距离特征
             x = torch.cat([x, candidate_bc], dim=1)
 
         B, _, N = x.shape
 
-        seg_out = self.seg_pointnet(x)
-        seg_logits = seg_out[:, :2, :]  # B,2,N
+        seg_out = self.seg_pointnet(x) #torch.Size([1, 11, 1024])
+        seg_logits = seg_out[:, :2, :]  # B,2,N #选出概率
         pred_cls = torch.argmax(seg_logits, dim=1, keepdim=True)  # B,1,N
         # 7 的解释，3+3+1 3：xyz， 3：其他特征 1：时间戳
         # 4 的解释，3+1 3：xyz，  1：时间戳
-        mask_points = x[:, :7, :] * pred_cls #此处注意维度，输入多了3个维度
+        mask_points = x[:, :7, :] * pred_cls #取出原始特征，赋上权重，此处注意维度，输入多了3个维度
         mask_xyz_t0 = mask_points[:, :3, :N // 2]  # B,3,N//2
         mask_xyz_t1 = mask_points[:, :3, N // 2:]
         if self.box_aware:
-            pred_bc = seg_out[:, 2:, :]
+            pred_bc = seg_out[:, 2:, :] #所以说这个输出可以被认为是9个（8corner+1center）点的特征
             mask_pred_bc = pred_bc * pred_cls
             # mask_pred_bc_t0 = mask_pred_bc[:, :, :N // 2]  # B,9,N//2
             # mask_pred_bc_t1 = mask_pred_bc[:, :, N // 2:]
             mask_points = torch.cat([mask_points, mask_pred_bc], dim=1)
             output_dict['pred_bc'] = pred_bc.transpose(1, 2)
 
-        point_feature = self.mini_pointnet(mask_points)
+        point_feature = self.mini_pointnet(mask_points) #用于提取点特征 [B, 256]
 
         # motion state prediction
-        motion_pred = self.motion_mlp(point_feature)  # B,4
-        if self.use_motion_cls:
+        motion_pred = self.motion_mlp(point_feature)  # B,4 这里的输出是 delta box，即为两个box之间的motion
+        if self.use_motion_cls: #用于监督
             motion_state_logits = self.motion_state_mlp(point_feature)  # B,2
             motion_mask = torch.argmax(motion_state_logits, dim=1, keepdim=True)  # B,1
             motion_pred_masked = motion_pred * motion_mask
@@ -127,30 +127,30 @@ class M2TRACKRADAR(base_model.MotionBaseModel):
         else:
             motion_pred_masked = motion_pred
         # previous bbox refinement
-        if self.use_prev_refinement:
-            prev_boxes = self.final_mlp(point_feature)  # previous bb, B,4
+        if self.use_prev_refinement: #用于监督
+            prev_boxes = self.final_mlp(point_feature)  # 同时预测出前一帧的box B,4 
             output_dict["estimation_boxes_prev"] = prev_boxes[:, :4]
         else:
-            prev_boxes = torch.zeros_like(motion_pred)
+            prev_boxes = torch.zeros_like(motion_pred) #无论是在训练阶段还是测试阶段，他都不需要前一帧的box，前一帧的box需要用的时候是预测出来的，要么就是0
 
         # 1st stage prediction
-        aux_box = points_utils.get_offset_box_tensor(prev_boxes, motion_pred_masked)
+        aux_box = points_utils.get_offset_box_tensor(prev_boxes, motion_pred_masked) #motion_pred预测的是相对的，需要放在坐标系里才能出来一个box
 
         # 2nd stage refinement
         if self.use_second_stage:
-            mask_xyz_t0_2_t1 = points_utils.get_offset_points_tensor(mask_xyz_t0.transpose(1, 2),
+            mask_xyz_t0_2_t1 = points_utils.get_offset_points_tensor(mask_xyz_t0.transpose(1, 2), #以前帧的box为基准，依据预测得到的一阶段motion，把前一帧的点平移
                                                                      prev_boxes[:, :4],
                                                                      motion_pred_masked).transpose(1, 2)  # B,3,N//2
-            mask_xyz_t01 = torch.cat([mask_xyz_t0_2_t1, mask_xyz_t1], dim=-1)  # B,3,N
+            mask_xyz_t01 = torch.cat([mask_xyz_t0_2_t1, mask_xyz_t1], dim=-1)  # B,3,N #拼起来
 
-            # transform to the aux_box coordinate system
+            # transform to the aux_box coordinate system 把坐标系也平移到一阶段出来的deltabox中心
             mask_xyz_t01 = points_utils.remove_transform_points_tensor(mask_xyz_t01.transpose(1, 2),
                                                                        aux_box).transpose(1, 2)
 
             if self.box_aware:
                 mask_xyz_t01 = torch.cat([mask_xyz_t01, mask_pred_bc], dim=1)
-            output_offset = self.box_mlp(self.mini_pointnet2(mask_xyz_t01))  # B,4
-            output = points_utils.get_offset_box_tensor(aux_box, output_offset)
+            output_offset = self.box_mlp(self.mini_pointnet2(mask_xyz_t01))  # B,4 再来一次，出一个box
+            output = points_utils.get_offset_box_tensor(aux_box, output_offset) #auxbox所处的坐标系已经是以上一帧box为中心了，是可以直接作为输出值的
             output_dict["estimation_boxes"] = output
         else:
             output_dict["estimation_boxes"] = aux_box

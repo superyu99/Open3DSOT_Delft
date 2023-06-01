@@ -265,7 +265,7 @@ class MotionBaseModel(BaseModel):
         this_pc = this_frame['pc']
         ref_box = results_bbs[-1]
         prev_frame_pc = points_utils.generate_subwindow(prev_pc, ref_box,
-                                                        scale=self.config.bb_scale,
+                                                        scale=self.config.bb_scale, #多次搜索区域为空是不是要扩大一下搜索区域？
                                                         offset=self.config.bb_offset)
         this_frame_pc = points_utils.generate_subwindow(this_pc, ref_box,
                                                         scale=self.config.bb_scale,
