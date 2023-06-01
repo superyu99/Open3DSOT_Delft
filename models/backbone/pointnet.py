@@ -158,7 +158,7 @@ class SegPointNet(nn.Module):
         for out_channel in per_point_mlp1:
             self.seq_per_point.append(
                 nn.Sequential(
-                    nn.Conv1d(in_channel, out_channel, 1),
+                    nn.Conv1d(in_channel, out_channel, 1), #nn.Conv1d的输入应当是一个3D的张量，[batch_size, in_channels, input_length]
                     nn.BatchNorm1d(out_channel),
                     nn.ReLU()
                 ))
@@ -179,7 +179,7 @@ class SegPointNet(nn.Module):
 
         self.output_size = output_size
         if output_size >= 0:
-            self.fc = nn.Conv1d(in_channel, output_size, 1)
+            self.fc = nn.Conv1d(in_channel, output_size, 1) #把per_point_mlp2的最后一维直接打成2
 
     def forward(self, x):
         """
