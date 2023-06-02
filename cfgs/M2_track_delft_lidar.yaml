@@ -18,6 +18,10 @@ num_candidates: 4
 motion_threshold: 0.15
 use_augmentation: True
 
+limit_num_points_in_prev_box: 10 #motion_prosessing函数里面的对前一帧box里面的点的数量限制，少于这个数量则放弃该帧，会去取其他帧
+limit_num_this_frame_subwindow_pc: 20 #motion_prosessing函数里面的对这一帧subwindow的点的数量限制，少于这个数量则放弃该帧，会去取其他帧
+
+
 
 #model configuration
 net_model: m2track

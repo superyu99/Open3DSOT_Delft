@@ -103,8 +103,8 @@ def motion_processing(data, config, template_transform=None, search_transform=No
     if search_transform is not None:
         this_pc, this_box = search_transform(this_pc, this_box)
 
-    if candidate_id == 0:
-        sample_offsets = np.zeros(3)
+    if candidate_id == 0: #candidate_id是用来控制：在训练阶段对每一个样本的refbox作随机偏移的次数
+        sample_offsets = np.zeros(3) #话说：refbox在训练阶段应该是完全等于真值的，但是为了模仿测试阶段的真实情况，作者把gtbox作了随机偏移，以模仿测试的实际情况
     else:
         sample_offsets = np.random.uniform(low=-0.3, high=0.3, size=3)
         sample_offsets[2] = sample_offsets[2] * (5 if config.degrees else np.deg2rad(5))
@@ -119,10 +119,10 @@ def motion_processing(data, config, template_transform=None, search_transform=No
                                                     offset=config.bb_offset)
     assert this_frame_pc.nbr_points() > config.limit_num_this_frame_subwindow_pc, 'not enough search points'
 
-    this_box = points_utils.transform_box(this_box, ref_box)
-    prev_box = points_utils.transform_box(prev_box, ref_box)
-    ref_box = points_utils.transform_box(ref_box, ref_box)
-    motion_box = points_utils.transform_box(this_box, prev_box)
+    this_box = points_utils.transform_box(this_box, ref_box) # 参数1 减去 参数2
+    prev_box = points_utils.transform_box(prev_box, ref_box) # 参数1 减去 参数2
+    ref_box = points_utils.transform_box(ref_box, ref_box)   # 参数1 减去 参数2
+    motion_box = points_utils.transform_box(this_box, prev_box) # 参数1 减去 参数2
 
     prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T, config.point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
     this_points, idx_this = points_utils.regularize_pc(this_frame_pc.points.T, config.point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
@@ -142,6 +142,9 @@ def motion_processing(data, config, template_transform=None, search_transform=No
 
     prev_points = np.concatenate([prev_points, timestamp_prev, seg_mask_prev[:, None]], axis=-1)
     this_points = np.concatenate([this_points, timestamp_this, seg_mask_this[:, None]], axis=-1)
+
+    #按照5frame的时间戳对prev_points和this_points排序可以写在这里
+    # todo
 
     stack_points = np.concatenate([prev_points, this_points], axis=0)
     stack_seg_label = np.hstack([seg_label_prev, seg_label_this])
@@ -204,7 +207,7 @@ class PointTrackingSampler(torch.utils.data.Dataset):
                 self.tracklet_start_ids.append(num_frames_total)
 
     def get_anno_index(self, index):
-        return index // self.num_candidates
+        return index // self.num_candidates #因为index的范围就是0-4*总样本数，所以要整除，因为0到样本数之间的值才能被用于获取一个实际的样本
 
     def get_candidate_index(self, index):
         return index % self.num_candidates
@@ -226,10 +229,10 @@ class PointTrackingSampler(torch.utils.data.Dataset):
             else:
                 for i in range(0, self.dataset.get_num_tracklets()):
                     if self.tracklet_start_ids[i] <= anno_id < self.tracklet_start_ids[i + 1]:
-                        tracklet_id = i
-                        this_frame_id = anno_id - self.tracklet_start_ids[i]
-                        prev_frame_id = max(this_frame_id - 1, 0)
-                        frame_ids = (0, prev_frame_id, this_frame_id)
+                        tracklet_id = i #找到这个索引位于哪个tracklet
+                        this_frame_id = anno_id - self.tracklet_start_ids[i] #找到是第几帧
+                        prev_frame_id = max(this_frame_id - 1, 0) #找到前面的那一帧
+                        frame_ids = (0, prev_frame_id, this_frame_id) #凑足：模板帧、前一帧、当前帧
             first_frame, template_frame, search_frame = self.dataset.get_frames(tracklet_id, frame_ids=frame_ids)
             data = {"first_frame": first_frame,
                     "template_frame": template_frame,
@@ -266,7 +269,7 @@ class MotionTrackingSampler(PointTrackingSampler):
 
     def __getitem__(self, index):
         anno_id = self.get_anno_index(index)
-        candidate_id = self.get_candidate_index(index)
+        candidate_id = self.get_candidate_index(index) #获取的是0到candicate数之间的数
         try:
 
             for i in range(0, self.dataset.get_num_tracklets()):
@@ -277,9 +280,9 @@ class MotionTrackingSampler(PointTrackingSampler):
                     frame_ids = (0, prev_frame_id, this_frame_id)
             first_frame, prev_frame, this_frame = self.dataset.get_frames(tracklet_id, frame_ids=frame_ids)
             data = {
-                "first_frame": first_frame,
-                "prev_frame": prev_frame,
-                "this_frame": this_frame,
+                "first_frame": first_frame, #每一帧包含：['pc', '3d_bbox', 'meta']
+                "prev_frame": prev_frame,   #每一帧包含：['pc', '3d_bbox', 'meta']
+                "this_frame": this_frame,   #每一帧包含：['pc', '3d_bbox', 'meta']
                 "candidate_id": candidate_id}
             return self.processing(data, self.config,
                                    template_transform=self.transform,

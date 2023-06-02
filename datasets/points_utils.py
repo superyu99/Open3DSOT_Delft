@@ -355,7 +355,7 @@ def apply_transform(in_box_pc, box, translation, rotation, flip_x, flip_y, rotat
     return new_pc, new_box
 
 
-def apply_augmentation(pc, box, wlh_factor=1.25):
+def apply_augmentation(pc, box, wlh_factor=1.25): #把box以及点云同时作随机平移和翻转
     in_box_mask = nuscenes.utils.geometry_utils.points_in_box(box, pc.points[0:3,:], wlh_factor=wlh_factor) #应当只考虑前三个维度
     # in_box_mask = get_in_box_mask(pc, box)
     # in_box_pc = PointCloud(pc.points[:, in_box_mask]) #原版实现，此处inboxpc只有xyz特征了

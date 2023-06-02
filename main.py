@@ -77,8 +77,8 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
-    # for i in range(len(train_data)):
-    #     data = train_data.__getitem__(i)
+    for i in range(len(train_data)):
+        data = train_data.__getitem__(i)
     #     center = data["box_label"][:3]
     #     size = data["bbox_size"]
     #     rotation = data["box_label"][3]
@@ -112,8 +112,8 @@ if not cfg.test:
     trainer.fit(net, train_loader, val_loader, ckpt_path=cfg.checkpoint)
 else:
     test_data = get_dataset(cfg, type='test', split=cfg.test_split)
-    for i in range(len(test_data)):
-        data = test_data.__getitem__(i)
+    # for i in range(len(test_data)):
+    #     data = test_data.__getitem__(i)
     # for i in range(len(test_data)):
     #     data = test_data.__getitem__(i)
     #     for j in range(len(data)):
@@ -139,6 +139,5 @@ else:
     #         vt.show_scenes(hist_pointcloud=[data[j]["pc"].points.T],bboxes=[box.corners().T])
     test_loader = DataLoader(test_data, batch_size=1, num_workers=cfg.workers, collate_fn=lambda x: x, pin_memory=True)
 
-    trainer = pl.Trainer(devices=-1, accelerator='auto', default_root_dir=cfg.log_dir,
-                         resume_from_checkpoint=cfg.checkpoint)
-    trainer.test(net, test_loader)
+    trainer = pl.Trainer(devices=-1, accelerator='auto', default_root_dir=cfg.log_dir)
+    trainer.test(net, test_loader, ckpt_path=cfg.checkpoint)
