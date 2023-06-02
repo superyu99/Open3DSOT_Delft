@@ -1,11 +1,5 @@
-import socket
-COMPUTER = "127.0.1.1" #本地电脑的ip
-hostname = socket.gethostname()
-ip_address = socket.gethostbyname(hostname)
-
-if COMPUTER in ip_address:
-    USE_COMPUTER = True
-else:
-    USE_COMPUTER =False
-
-
+temp_index = [1,2,3,7,8,9]
+for i in range(len(temp_index) ):
+    # print(temp_index[i])
+    # print(temp_index[i+1])
+    print(i)

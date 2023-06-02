@@ -95,7 +95,7 @@
                 "--cfg",
                 "cfgs/M2_track_delft_radar.yaml",
                 "--checkpoint",
-                "/workspace/mot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
+                "/workspace/sot/Open3DSOT/output/M2RADAR_car/lightning_logs/version_0/checkpoints/epoch=62-step=22113.ckpt",
                 "--test",
             ],
             "env": {
