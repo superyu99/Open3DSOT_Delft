@@ -2,7 +2,7 @@
 ___init__.py
 Created by zenn at 2021/7/18 15:50
 """
-from datasets import kitti, sampler, nuscenes_data, waymo_data, delft_lidar, delft_radar
+from datasets import kitti, sampler, nuscenes_data, waymo_data, delft_lidar, delft_radar, delft_radar_lidar
 
 
 def get_dataset(config, type='train', **kwargs):
@@ -23,6 +23,14 @@ def get_dataset(config, type='train', **kwargs):
 
     elif config.dataset == 'delft_radar':
         data = delft_radar.DelftRadarDataset(path=config.path,
+                                  split=kwargs.get('split', 'train'),
+                                  category_name=config.category_name,
+                                  coordinate_mode=config.coordinate_mode,
+                                  preloading=config.preloading,
+                                  preload_offset=config.preload_offset if type != 'test' else -1)
+        
+    elif config.dataset == 'delft_radar_lidar':
+        data = delft_radar_lidar.DelftRadarLidarDataset(path=config.path,
                                   split=kwargs.get('split', 'train'),
                                   category_name=config.category_name,
                                   coordinate_mode=config.coordinate_mode,
@@ -57,6 +65,9 @@ def get_dataset(config, type='train', **kwargs):
                                             config=config)
     elif type.lower() == 'train_motion':
         return sampler.MotionTrackingSampler(dataset=data,
+                                             config=config)
+    elif type.lower() == 'train_motion_cross_modal':
+        return sampler.MotionTrackingSamplerRadarLidar(dataset=data,
                                              config=config)
     else:
         return sampler.TestTrackingSampler(dataset=data, config=config)
