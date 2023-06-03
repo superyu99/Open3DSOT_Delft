@@ -323,3 +323,82 @@ class MotionBaseModel(BaseModel):
             data_dict.update({'candidate_bc': points_utils.np_to_torch_tensor(candidate_bc.astype('float32'),
                                                                               device=self.device)})
         return data_dict, results_bbs[-1]
+    
+class MotionBaseModelRadarLidar(BaseModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.save_hyperparameters()
+
+    def build_input_dict(self, sequence, frame_id, results_bbs): #注意：可能会有空点云输入
+        assert frame_id > 0, "no need to construct an input_dict at frame 0"
+
+        prev_frame = sequence[frame_id - 1]
+        this_frame = sequence[frame_id]
+        prev_radar_pc, prev_lidar_pc = prev_frame['radar_pc'], prev_frame['lidar_pc']
+        this_radar_pc, this_lidar_pc = this_frame['radar_pc'], this_frame['lidar_pc']
+        ref_box = results_bbs[-1]
+        this_box = this_frame['3d_bbox']
+        prev_frame_radar_pc = points_utils.generate_subwindow(prev_radar_pc, ref_box,
+                                                        scale=self.config.bb_scale, #多次搜索区域为空是不是要扩大一下搜索区域？
+                                                        offset=self.config.bb_offset)
+        this_frame_radar_pc = points_utils.generate_subwindow(this_radar_pc, ref_box,
+                                                        scale=self.config.bb_scale,
+                                                        offset=self.config.bb_offset)
+        
+        prev_frame_lidar_pc = points_utils.generate_subwindow(prev_lidar_pc, ref_box,
+                                                        scale=self.config.bb_scale, #多次搜索区域为空是不是要扩大一下搜索区域？
+                                                        offset=self.config.bb_offset)
+        this_frame_lidar_pc = points_utils.generate_subwindow(this_lidar_pc, ref_box,
+                                                        scale=self.config.bb_scale,
+                                                        offset=self.config.bb_offset)
+
+        canonical_box = points_utils.transform_box(ref_box, ref_box)
+        local_box = points_utils.transform_box(this_box, ref_box)
+        prev_radar_points, idx_prev = points_utils.regularize_pc(prev_frame_radar_pc.points.T, 
+                                                           self.config.radar_point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+
+        this_radar_points, idx_this = points_utils.regularize_pc(this_frame_radar_pc.points.T,
+                                                           self.config.radar_point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+        
+        prev_lidar_points, idx_prev = points_utils.regularize_pc(prev_frame_lidar_pc.points.T, 
+                                                           self.config.lidar_point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+        this_lidar_points, idx_this = points_utils.regularize_pc(this_frame_lidar_pc.points.T,
+                                                           self.config.lidar_point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+        
+        
+
+        seg_mask_prev = geometry_utils.points_in_box(canonical_box, prev_radar_points.T[:3,:], 1.25).astype(float)
+        seg_label_prev = geometry_utils.points_in_box(canonical_box, prev_radar_points.T[:3,:], 1.25).astype(int)
+        seg_label_this = geometry_utils.points_in_box(local_box, this_radar_points.T[:3,:], 1.25).astype(int)
+        stack_seg_label = np.hstack([seg_label_prev, seg_label_this])
+
+        # Here we use 0.2/0.8 instead of 0/1 to indicate that the previous box is not GT.
+        # When boxcloud is used, the actual value of prior-targetness mask doesn't really matter.
+        if frame_id != 1:
+            seg_mask_prev[seg_mask_prev == 0] = 0.2
+            seg_mask_prev[seg_mask_prev == 1] = 0.8
+        seg_mask_this = np.full(seg_mask_prev.shape, fill_value=0.5)
+
+        timestamp_prev = np.full((self.config.radar_point_sample_size, 1), fill_value=0)
+        timestamp_this = np.full((self.config.radar_point_sample_size, 1), fill_value=0.1)
+        prev_points = np.concatenate([prev_radar_points, timestamp_prev, seg_mask_prev[:, None]], axis=-1)
+        this_points = np.concatenate([this_radar_points, timestamp_this, seg_mask_this[:, None]], axis=-1)
+        
+        stack_points = np.concatenate([prev_points, this_points], axis=0)
+
+        data_dict = {"points": torch.tensor(stack_points[None, :], device=self.device, dtype=torch.float32),
+                     "seg_label": torch.tensor(stack_seg_label[None, :], device=self.device, dtype=torch.int),
+                     'lidar_points_prev': torch.tensor(prev_lidar_points[None, :], device=self.device, dtype=torch.float32),
+                     'lidar_points_this': torch.tensor(this_lidar_points[None, :], device=self.device, dtype=torch.float32), }
+        if getattr(self.config, 'box_aware', False):
+            candidate_bc_prev = points_utils.get_point_to_box_distance(
+                stack_points[:self.config.radar_point_sample_size, :3], canonical_box)
+            candidate_bc_this = np.zeros_like(candidate_bc_prev)
+            candidate_bc = np.concatenate([candidate_bc_prev, candidate_bc_this], axis=0)
+            data_dict.update({'candidate_bc': points_utils.np_to_torch_tensor(candidate_bc.astype('float32'),
+                                                                              device=self.device)})
+        return data_dict, results_bbs[-1]

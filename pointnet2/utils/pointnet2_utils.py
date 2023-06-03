@@ -317,7 +317,7 @@ class QueryAndGroup(nn.Module):
         idx = ball_query(self.radius, self.nsample, xyz, new_xyz)
         xyz_trans = xyz.transpose(1, 2).contiguous()
         grouped_xyz = grouping_operation(xyz_trans, idx)  # (B, 3, npoint, nsample)
-        grouped_xyz -= new_xyz.transpose(1, 2).unsqueeze(-1)
+        grouped_xyz -= new_xyz.transpose(1, 2).unsqueeze(-1) #临时屏蔽
         if self.normalize_xyz:
             grouped_xyz /= self.radius
 

@@ -8,6 +8,7 @@ from nuscenes.utils import geometry_utils
 import datasets.points_utils as points_utils
 from datasets.searchspace import KalmanFiltering
 
+# import vis_tool as vt
 
 def no_processing(data, *args):
     return data
@@ -182,6 +183,141 @@ def motion_processing(data, config, template_transform=None, search_transform=No
                           'candidate_bc': candidate_bc.astype('float32')})
     return data_dict
 
+def motion_processing_radar_lidar(data, config, template_transform=None, search_transform=None):
+    """
+
+    :param data:
+    :param config: {model_bb_scale,model_bb_offset,search_bb_scale, search_bb_offset}
+    :return:
+    point_sample_size
+    bb_scale
+    bb_offset
+    """
+    prev_frame = data['prev_frame']
+    this_frame = data['this_frame']
+    candidate_id = data['candidate_id']
+    prev_lidar_pc, prev_radar_pc, prev_box = prev_frame['lidar_pc'], prev_frame['radar_pc'], prev_frame['3d_bbox']
+    this_lidar_pc, this_radar_pc, this_box = this_frame['lidar_pc'], this_frame['radar_pc'], this_frame['3d_bbox']
+
+    # vt.show_scenes(pointcloud=[this_lidar_pc.points.T],hist_pointcloud=[this_radar_pc.points.T],bboxes = [this_box.corners().T])
+
+    num_points_in_prev_box = geometry_utils.points_in_box(prev_box, prev_radar_pc.points[0:3,:]).sum() #应当只考虑点的xyz特征
+    assert num_points_in_prev_box > config.limit_num_points_in_prev_box, 'not enough target points'
+
+    if template_transform is not None:
+        prev_lidar_pc, prev_box = template_transform(prev_lidar_pc, prev_box)
+        prev_radar_pc, prev_box = template_transform(prev_radar_pc, prev_box)
+    if search_transform is not None:
+        this_lidar_pc, this_box = search_transform(this_lidar_pc, this_box)
+        this_radar_pc, this_box = search_transform(this_radar_pc, this_box)
+
+    if candidate_id == 0: #candidate_id是用来控制：在训练阶段对每一个样本的refbox作随机偏移的次数
+        sample_offsets = np.zeros(3) #话说：refbox在训练阶段应该是完全等于真值的，但是为了模仿测试阶段的真实情况，作者把gtbox作了随机偏移，以模仿测试的实际情况
+    else:
+        sample_offsets = np.random.uniform(low=-0.3, high=0.3, size=3)
+        sample_offsets[2] = sample_offsets[2] * (5 if config.degrees else np.deg2rad(5))
+    ref_box = points_utils.getOffsetBB(prev_box, sample_offsets, limit_box=config.data_limit_box,
+                                       degrees=config.degrees)
+    prev_frame_lidar_pc = points_utils.generate_subwindow(prev_lidar_pc, ref_box,
+                                                    scale=config.bb_scale,
+                                                    offset=config.bb_offset)
+    
+    prev_frame_radar_pc = points_utils.generate_subwindow(prev_radar_pc, ref_box,
+                                                    scale=config.bb_scale,
+                                                    offset=config.bb_offset)
+
+    this_frame_lidar_pc = points_utils.generate_subwindow(this_lidar_pc, ref_box,
+                                                    scale=config.bb_scale,
+                                                    offset=config.bb_offset)
+    this_frame_radar_pc = points_utils.generate_subwindow(this_radar_pc, ref_box,
+                                                    scale=config.bb_scale,
+                                                    offset=config.bb_offset)
+    
+    assert this_frame_radar_pc.nbr_points() > config.limit_num_this_frame_subwindow_pc, 'not enough search points'
+
+    this_box = points_utils.transform_box(this_box, ref_box) # 参数1 减去 参数2
+    prev_box = points_utils.transform_box(prev_box, ref_box) # 参数1 减去 参数2
+    ref_box = points_utils.transform_box(ref_box, ref_box)   # 参数1 减去 参数2
+    motion_box = points_utils.transform_box(this_box, prev_box) # 参数1 减去 参数2
+
+    prev_lidar_points, idx_prev = points_utils.regularize_pc(prev_frame_lidar_pc.points.T, config.lidar_point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
+    prev_radar_points, idx_prev = points_utils.regularize_pc(prev_frame_radar_pc.points.T, config.radar_point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
+    
+    this_lidar_points, idx_this = points_utils.regularize_pc(this_frame_lidar_pc.points.T, config.lidar_point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
+    this_radar_points, idx_this = points_utils.regularize_pc(this_frame_radar_pc.points.T, config.radar_point_sample_size) #采样到特定数量,这里的策略是在已有的点里面重复随机选，直到达到特定数量
+
+    #此处仅仅对radar作了处理，因为我们不用lidar参与网络
+    seg_label_this = geometry_utils.points_in_box(this_box, this_radar_points.T[:3,:], 1.25).astype(int) #应当只考虑xyz特征
+    seg_label_prev = geometry_utils.points_in_box(prev_box, prev_radar_points.T[:3,:], 1.25).astype(int) #应当只考虑xyz特征
+    seg_mask_prev = geometry_utils.points_in_box(ref_box, prev_radar_points.T[:3,:], 1.25).astype(float) #应当只考虑xyz特征
+    if candidate_id != 0:
+        # Here we use 0.2/0.8 instead of 0/1 to indicate that the previous box is not GT.
+        # When boxcloud is used, the actual value of prior-targetness mask doesn't really matter.
+        seg_mask_prev[seg_mask_prev == 0] = 0.2
+        seg_mask_prev[seg_mask_prev == 1] = 0.8
+    seg_mask_this = np.full(seg_mask_prev.shape, fill_value=0.5)
+
+    timestamp_prev = np.full((config.radar_point_sample_size, 1), fill_value=0)
+    timestamp_this = np.full((config.radar_point_sample_size, 1), fill_value=0.1)
+
+    prev_points = np.concatenate([prev_radar_points, timestamp_prev, seg_mask_prev[:, None]], axis=-1)
+    this_points = np.concatenate([this_radar_points, timestamp_this, seg_mask_this[:, None]], axis=-1)
+
+    #按照5frame的时间戳对prev_points和this_points排序可以写在这里
+    # todo
+
+    # #试验：为每一个radarpoint选择一个lidarpoint，并用lidar的xyz替换radar的xyz
+    # prev_lidar_points_tensor = torch.tensor(prev_lidar_points[:, 0:3].astype('float32'),device='cuda')
+    # prev_points_tensor = torch.tensor(prev_points[:, 0:3].astype('float32'),device='cuda')
+    # this_lidar_points_tensor = torch.tensor(this_lidar_points[:, 0:3].astype('float32'),device='cuda')
+    # this_points_tensor = torch.tensor(this_points[:, 0:3].astype('float32'),device='cuda')
+
+    # delta_xyz_prev = QA(prev_lidar_points_tensor.unsqueeze(0), prev_points_tensor.unsqueeze(0)).squeeze().cpu().numpy().T
+    # delta_xyz_this = QA(this_lidar_points_tensor.unsqueeze(0), this_points_tensor.unsqueeze(0)).squeeze().cpu().numpy().T
+    # prev_points[:,0:3][seg_label_prev] += delta_xyz_prev[seg_label_prev] #把在框里的点的xyz给成lidar的
+    # this_points[:,0:3][seg_label_this] += delta_xyz_this[seg_label_this] #把在框里的点的xyz给成lidar的
+
+    # vt.show_scenes(pointcloud=[this_radar_points],raw_sphere=this_points,bboxes = [this_box.corners().T])
+
+    stack_points = np.concatenate([prev_points, this_points], axis=0)
+    stack_seg_label = np.hstack([seg_label_prev, seg_label_this])
+    theta_this = this_box.orientation.degrees * this_box.orientation.axis[-1] if config.degrees else \
+        this_box.orientation.radians * this_box.orientation.axis[-1]
+    box_label = np.append(this_box.center, theta_this).astype('float32')
+    theta_prev = prev_box.orientation.degrees * prev_box.orientation.axis[-1] if config.degrees else \
+        prev_box.orientation.radians * prev_box.orientation.axis[-1]
+    box_label_prev = np.append(prev_box.center, theta_prev).astype('float32')
+    theta_motion = motion_box.orientation.degrees * motion_box.orientation.axis[-1] if config.degrees else \
+        motion_box.orientation.radians * motion_box.orientation.axis[-1]
+    motion_label = np.append(motion_box.center, theta_motion).astype('float32')
+
+    motion_state_label = np.sqrt(np.sum((this_box.center - prev_box.center) ** 2)) > config.motion_threshold
+
+    data_dict = {
+        'points': stack_points.astype('float32'), #1024*8
+        'lidar_points_prev':prev_lidar_points.astype('float32'), #1024*3
+        'lidar_points_this':this_lidar_points.astype('float32'), #1024*3
+        'box_label': box_label,
+        'box_label_prev': box_label_prev,
+        'motion_label': motion_label,
+        'motion_state_label': motion_state_label.astype('int'),
+        'bbox_size': this_box.wlh,
+        'seg_label': stack_seg_label.astype('int'),
+    }
+
+    if getattr(config, 'box_aware', False):
+        prev_bc = points_utils.get_point_to_box_distance(stack_points[:config.radar_point_sample_size, :3], prev_box)
+        this_bc = points_utils.get_point_to_box_distance(stack_points[config.radar_point_sample_size:, :3], this_box)
+        candidate_bc_prev = points_utils.get_point_to_box_distance(stack_points[:config.radar_point_sample_size, :3], ref_box)
+        candidate_bc_this = np.zeros_like(candidate_bc_prev)
+        candidate_bc = np.concatenate([candidate_bc_prev, candidate_bc_this], axis=0)
+
+        data_dict.update({'prev_bc': prev_bc.astype('float32'),
+                          'this_bc': this_bc.astype('float32'),
+                          'candidate_bc': candidate_bc.astype('float32')})
+    return data_dict
+
+
 
 class PointTrackingSampler(torch.utils.data.Dataset):
     def __init__(self, dataset, random_sample, sample_per_epoch=10000, processing=siamese_processing, config=None,
@@ -266,6 +402,34 @@ class MotionTrackingSampler(PointTrackingSampler):
     def __init__(self, dataset, config=None, **kwargs):
         super().__init__(dataset, random_sample=False, config=config, **kwargs)
         self.processing = motion_processing
+
+    def __getitem__(self, index):
+        anno_id = self.get_anno_index(index)
+        candidate_id = self.get_candidate_index(index) #获取的是0到candicate数之间的数
+        try:
+
+            for i in range(0, self.dataset.get_num_tracklets()):
+                if self.tracklet_start_ids[i] <= anno_id < self.tracklet_start_ids[i + 1]:
+                    tracklet_id = i
+                    this_frame_id = anno_id - self.tracklet_start_ids[i]
+                    prev_frame_id = max(this_frame_id - 1, 0)
+                    frame_ids = (0, prev_frame_id, this_frame_id)
+            first_frame, prev_frame, this_frame = self.dataset.get_frames(tracklet_id, frame_ids=frame_ids)
+            data = {
+                "first_frame": first_frame, #每一帧包含：['pc', '3d_bbox', 'meta']
+                "prev_frame": prev_frame,   #每一帧包含：['pc', '3d_bbox', 'meta']
+                "this_frame": this_frame,   #每一帧包含：['pc', '3d_bbox', 'meta']
+                "candidate_id": candidate_id}
+            return self.processing(data, self.config,
+                                   template_transform=self.transform,
+                                   search_transform=self.transform)
+        except AssertionError:
+            return self[torch.randint(0, len(self), size=(1,)).item()]
+
+class MotionTrackingSamplerRadarLidar(PointTrackingSampler):
+    def __init__(self, dataset, config=None, **kwargs):
+        super().__init__(dataset, random_sample=False, config=config, **kwargs)
+        self.processing = motion_processing_radar_lidar
 
     def __getitem__(self, index):
         anno_id = self.get_anno_index(index)
