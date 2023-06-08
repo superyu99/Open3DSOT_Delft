@@ -651,8 +651,8 @@ class DelftRadarLidarDataset(base_dataset.BaseDataset):
         size = [dy,dx,dz]
         ry = -box[6] 
 
-        radar_pc = RadarCloud(self.get_radar(frame).reshape(-1, 7).T)
-        lidar_pc = PointCloud(self.get_lidar(frame).reshape(-1, 4).T)
+        radar_pc = PointCloud(self.get_lidar(frame).reshape(-1, 4).T)
+        lidar_pc = RadarCloud(self.get_radar(frame).reshape(-1, 7).T)
         orientation = Quaternion(
                 axis=[0, 0, -1], radians=ry)
 

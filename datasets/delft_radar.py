@@ -279,7 +279,7 @@ class DelftRadarDataset(base_dataset.BaseDataset):
 
         return new_tracklet_df, track_id_list
     
-    #专注于判断box里面有没有点，假如前3帧没有点，第4帧首次出现了点，那之后的不管了，只删除前三帧 
+    #专注于判断序列开头的box里面有没有点，假如前3帧没有点，第4帧首次出现了点，那之后的不管了，只删除前三帧 
     def process_tracklets_V3(self,tracklet_df, track_id_list, x_limit, y_limit, z_limit, min_length):
         """
         根据给定的x和y限制，处理tracklets数据。
@@ -361,6 +361,80 @@ class DelftRadarDataset(base_dataset.BaseDataset):
 
         return new_tracklet_df, track_id_list
 
+    #专注于判断box是不是在图像里
+    def process_tracklets_V4(self,tracklet_df, track_id_list, x_limit, y_limit, z_limit, min_length):
+        """
+        根据给定的x和y限制，处理tracklets数据。
+
+        参数:
+            tracklet_df: pandas.DataFrame, 包含tracklet信息的数据帧
+            track_id_list: list, 所有Tracklet的唯一id列表
+            x_limit: list, x的范围，格式为[x_min, x_max]
+            y_limit: list, y的范围，格式为[y_min, y_max]
+            min_length: int, 最短子tracklet长度
+
+        返回:
+            new_tracklet_df: pandas.DataFrame, 处理过后的tracklet数据
+            track_id_list: list, 更新后的所有Tracklet的唯一id列表
+        """
+
+        # generate a list as temporary index
+        temp_index = list(range(len(tracklet_df)))
+
+        out_range_indices = list()
+
+        # 判断 judge if x and y are in the range
+        for idx, row in tracklet_df.iterrows():
+            frame = row['frame']
+            box = self.get_radarbox_on_camera(row,frame)
+            # #统计box信息
+            # with open('./%s_all_box_stats.txt'%(str(self.class_names[0])), 'a+') as f:
+            #     print(f"{box[0]},{box[1]},{box[2]}",file=f)
+            corners = boxes_to_corners_3d(box.reshape(-1,7))
+            points = self.get_radar(frame)
+            in_box_num = np.count_nonzero(in_hull(points,corners.reshape(-1,3)))
+            if  in_box_num < 1:  # 点数小于1，
+                out_range_indices.append(idx) 
+                # if platform_utils.USE_COMPUTER & True:
+                #     vt.show_scenes(
+                #         raw_sphere=corners.reshape(-1,3),
+                #         pred_bbox=box.reshape(-1,7),
+                #         pointcloud = [points],
+                #         )
+
+        # 移除不在范围之内box对应的id，remove out range indices from temp_index
+        temp_index = [idx for idx in temp_index if idx not in out_range_indices]
+        if not temp_index:
+            return pd.DataFrame(), track_id_list  # 返回空表
+
+        # Step3: 遍历剩余帧，为满足条件的子tracklet分配新的track_id
+        sub_tracklet_list = []
+        max_track_id = max(track_id_list)
+        for i in range(len(temp_index) - 1):
+            sub_tracklet_list.append(temp_index[i])
+            if abs(temp_index[i] - temp_index[i+1]) > 1: #判断剩下的那些id是否连续，不连续需要生成新的track_id
+                if len(sub_tracklet_list) >= min_length:
+                    max_track_id += 1
+                    tracklet_df.loc[sub_tracklet_list, 'track_id'] = max_track_id #用新ID替换原来的ID
+                    track_id_list.append(max_track_id) #如果生成了新的ID，就要加到整体id列表记录下来，下次还要用
+                else:
+                    out_range_indices.extend(sub_tracklet_list) #不足长度的删掉，不应该再出现在表里
+                sub_tracklet_list = []
+        
+        # 对最后一组进行处理，因为
+        if temp_index:
+            sub_tracklet_list.append(temp_index[-1])
+            if len(sub_tracklet_list) >= min_length:
+                max_track_id += 1
+                tracklet_df.loc[sub_tracklet_list, 'track_id'] = max_track_id
+                track_id_list.append(max_track_id)
+            else:
+                out_range_indices.extend(sub_tracklet_list) #不足长度的删掉，不应该再出现在表里
+
+        # Step4: 删除out_range_indices对应的行
+        new_tracklet_df = tracklet_df.drop(out_range_indices)
+
+        return new_tracklet_df, track_id_list
 
     def _build_tracklet_anno(self):
 
@@ -625,6 +699,33 @@ class DelftRadarDataset(base_dataset.BaseDataset):
        
 
         return transform_3dbox(box,transform_matrices["camera"])
+    
+    def get_radarbox_on_camera(self,label: pd.Series,frame) -> np.array:
+        # 解压数据
+        x = label['x']
+        y = label['y']
+        z = label['z']
+        height = label['height'] #坐标错位
+        width = label['width'] #坐标错位
+        length = label['length'] #坐标错位
+        ry = label['ry']
+
+        box = np.array([x,y,z,height,width,length,ry])
+
+        # 加载变换矩阵
+        frame_loader = FrameDataLoader(kitti_locations=self.DelftLocation,
+                                       frame_number=f"{frame:05d}")
+        frame_transforms = FrameTransformMatrix(frame_loader)  # 用于处理label
+
+
+        transform_matrices = {
+            'camera': np.eye(4, dtype=float),
+            'lidar': frame_transforms.t_camera_lidar,
+            'radar': frame_transforms.t_camera_radar
+        } #这个实际上与if self.origin == 'camera'对应
+
+        return transform_3dbox(box,transform_matrices["camera"])
+       
 
     def _get_frame_from_anno(self, anno):
         frame = anno['frame']
@@ -642,3 +743,5 @@ class DelftRadarDataset(base_dataset.BaseDataset):
         # pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset)
       
         return {"pc": pc, "3d_bbox": bb, 'meta': anno}
+    
+

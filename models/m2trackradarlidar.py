@@ -86,34 +86,58 @@ class M2TRACKRADARLIDAR(base_model.MotionBaseModelRadarLidar):
         
         #---------------我自己--------------------
         self.radar_disp_radius = 0.3
-        self.QA = QueryAndGroup(self.radar_disp_radius,1) #在半径0.3寻找lidar点
+        self.QA = QueryAndGroup(self.radar_disp_radius,16,return_idx=True) #在半径0.3寻找lidar点
 
     def forward(self, input_dict):
         #----------------首先对radarpoints的xyz作偏移----------------
         point_num = input_dict["points"].shape[1]
-        prev_xyz = input_dict["points"][:,0:point_num//2,:3].contiguous()
-        this_xyz = input_dict["points"][:,point_num//2:,:3].contiguous()
+        B = input_dict["points"].shape[0]
+        prev_xyz = input_dict["points"][:,0:point_num//2,:3].contiguous() #lidar点
+        this_xyz = input_dict["points"][:,point_num//2:,:3].contiguous() #lidar点
 
-        lidar_prev = input_dict["lidar_points_prev"]
-        lidar_this = input_dict["lidar_points_this"]
+        lidar_prev = input_dict["lidar_points_prev"][:,:,:3].contiguous() #radar点
+        lidar_this = input_dict["lidar_points_this"][:,:,:3].contiguous() #radar点
 
-        delta_xyz_prev = self.QA(lidar_prev,prev_xyz)
-        delta_xyz_prev = delta_xyz_prev.squeeze(3).transpose(1, 2)
-        distances = delta_xyz_prev.norm(p=2, dim=-1)  # 计算距离
-        mask = distances <= self.radar_disp_radius  # 创建一个距离小于等于搜索半径的布尔掩码
-        delta_xyz_prev = delta_xyz_prev * mask.unsqueeze(-1).float()  # 将距离大于搜索半径的邻域点坐标设置为零
+        #---------------前一帧处理------------
+        delta_xyz_prev,idx = self.QA(prev_xyz,lidar_prev) #以radar为中心，查找半径内的点
+        delta_xyz_prev = delta_xyz_prev.permute(0, 2, 3, 1) #B*512*16*3
+        distances = delta_xyz_prev.norm(dim=-1)  # 计算距离，建议使用delta_xyz_prev.norm()
+        mask = distances[:,:] <= self.radar_disp_radius  # 创建一个距离小于等于搜索半径的布尔掩码
 
-        delta_xyz_this = self.QA(lidar_this,this_xyz)
-        delta_xyz_this = delta_xyz_this.squeeze(3).transpose(1, 2)
-        distances = delta_xyz_this.norm(p=2, dim=-1)  # 计算距离
-        mask = distances <= self.radar_disp_radius  # 创建一个距离小于等于搜索半径的布尔掩码
-        delta_xyz_this = delta_xyz_this * mask.unsqueeze(-1).float()  # 将距离大于搜索半径的邻域点坐标设置为零
+        extra_features_tensor = torch.zeros(B, 1024, 3).to(input_dict["points"].device)
+        for b in range(B):
+            for p in range(512):
+                ids = idx[b,p] #16个数
+                msk = mask[b,p] #16个布尔值
+                ids = ids[msk]
+                feature = input_dict["lidar_points_prev"][b,p][3:] #找到的额外3个特征
+                extra_features_tensor[b][ids] = feature
+        cated_prev = torch.cat([input_dict["points"][:,0:point_num//2,:],extra_features_tensor],dim=2)
+        #---------------------后一帧处理------------
+        delta_xyz_prev,idx = self.QA(this_xyz,lidar_this) #以radar为中心，查找半径内的点
+        delta_xyz_prev = delta_xyz_prev.permute(0, 2, 3, 1) #B*512*16*3
+        distances = delta_xyz_prev.norm(dim=-1)  # 计算距离，建议使用delta_xyz_prev.norm()
+        mask = distances[:,:] <= self.radar_disp_radius  # 创建一个距离小于等于搜索半径的布尔掩码
 
-        inbox_mask_prev = input_dict["seg_label"][:,0:point_num//2] == 1
-        input_dict["points"][:, 0:point_num//2, :3][inbox_mask_prev] += delta_xyz_prev[inbox_mask_prev]
-        inbox_mask_this = input_dict["seg_label"][:, point_num//2:] == 1
-        input_dict["points"][:, point_num//2: , :3][inbox_mask_this] += delta_xyz_this[inbox_mask_this]
-        #-----------------------------------------------------------
+        extra_features_tensor = torch.zeros(B, 1024, 3).to(input_dict["points"].device)
+        for b in range(B):
+            for p in range(512):
+                ids = idx[b,p] #16个数
+                msk = mask[b,p] #16个布尔值
+                ids = ids[msk]
+                feature = input_dict["lidar_points_prev"][b,p][3:] #找到的额外3个特征
+                extra_features_tensor[b][ids] = feature
+        cated_this = torch.cat([input_dict["points"][:,point_num//2:,:],extra_features_tensor],dim=2)
+        new_points = torch.cat([cated_prev,cated_this],1)
+
+        input_dict["points"] = new_points #torch.Size([2, 2048, 8])
+
+        # watch 效果：
+        # import vis_tool as vt
+        # vt.show_scenes(pointcloud=[lidar_prev[0].detach().cpu().numpy()],  #lidar点：红色
+        #                hist_pointcloud=[prev_xyz[0].detach().cpu().numpy()], #原始radar点：蓝色
+        #                raw_sphere=input_dict["points"][:, 0:point_num//2, :3].detach().cpu().numpy()[0]) #偏移之后的radar点：红球
+        # -----------------------------------------------------------
 
        
         output_dict = {}
