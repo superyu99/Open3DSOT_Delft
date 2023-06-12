@@ -402,3 +402,62 @@ class MotionBaseModelRadarLidar(BaseModel):
             data_dict.update({'candidate_bc': points_utils.np_to_torch_tensor(candidate_bc.astype('float32'),
                                                                               device=self.device)})
         return data_dict, results_bbs[-1]
+    
+class MotionBaseModelImage(BaseModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.save_hyperparameters()
+
+    def build_input_dict(self, sequence, frame_id, results_bbs): #注意：可能会有空点云输入
+        assert frame_id > 0, "no need to construct an input_dict at frame 0"
+
+        prev_frame = sequence[frame_id - 1]
+        this_frame = sequence[frame_id]
+        prev_pc = prev_frame['pc']
+        this_pc = this_frame['pc']
+        prev_masked_image = prev_frame['masked_image']
+        this_masked_image = prev_frame['masked_image']
+        ref_box = results_bbs[-1]
+        prev_frame_pc = points_utils.generate_subwindow(prev_pc, ref_box,
+                                                        scale=self.config.bb_scale, #多次搜索区域为空是不是要扩大一下搜索区域？
+                                                        offset=self.config.bb_offset)
+        this_frame_pc = points_utils.generate_subwindow(this_pc, ref_box,
+                                                        scale=self.config.bb_scale,
+                                                        offset=self.config.bb_offset)
+
+        canonical_box = points_utils.transform_box(ref_box, ref_box)
+        prev_points, idx_prev = points_utils.regularize_pc(prev_frame_pc.points.T, 
+                                                           self.config.point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+
+        this_points, idx_this = points_utils.regularize_pc(this_frame_pc.points.T,
+                                                           self.config.point_sample_size,
+                                                           seed=1) #获得统一数量的点，如果点为空，则返回全0特征
+        seg_mask_prev = geometry_utils.points_in_box(canonical_box, prev_points.T[:3,:], 1.25).astype(float)
+
+        # Here we use 0.2/0.8 instead of 0/1 to indicate that the previous box is not GT.
+        # When boxcloud is used, the actual value of prior-targetness mask doesn't really matter.
+        if frame_id != 1:
+            seg_mask_prev[seg_mask_prev == 0] = 0.2
+            seg_mask_prev[seg_mask_prev == 1] = 0.8
+        seg_mask_this = np.full(seg_mask_prev.shape, fill_value=0.5)
+
+        timestamp_prev = np.full((self.config.point_sample_size, 1), fill_value=0)
+        timestamp_this = np.full((self.config.point_sample_size, 1), fill_value=0.1)
+        prev_points = np.concatenate([prev_points, timestamp_prev, seg_mask_prev[:, None]], axis=-1)
+        this_points = np.concatenate([this_points, timestamp_this, seg_mask_this[:, None]], axis=-1)
+        
+        stack_points = np.concatenate([prev_points, this_points], axis=0)
+
+        data_dict = {"points": torch.tensor(stack_points[None, :], device=self.device, dtype=torch.float32),
+                     "prev_masked_image":torch.tensor(prev_masked_image[None,:], device=self.device, dtype=torch.float32),
+                     "this_masked_image":torch.tensor(this_masked_image[None,:], device=self.device, dtype=torch.float32),
+                     }
+        if getattr(self.config, 'box_aware', False):
+            candidate_bc_prev = points_utils.get_point_to_box_distance(
+                stack_points[:self.config.point_sample_size, :3], canonical_box)
+            candidate_bc_this = np.zeros_like(candidate_bc_prev)
+            candidate_bc = np.concatenate([candidate_bc_prev, candidate_bc_this], axis=0)
+            data_dict.update({'candidate_bc': points_utils.np_to_torch_tensor(candidate_bc.astype('float32'),
+                                                                              device=self.device)})
+        return data_dict, results_bbs[-1]
