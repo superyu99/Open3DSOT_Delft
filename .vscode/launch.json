@@ -67,6 +67,26 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            "name": "main_delft_image",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_delft_image.yaml",
+                "--batch_size",
+                "2",
+                "--epoch",
+                "20",
+                // "--test",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "main_delft_radar_lidar",
             "type": "python",
             "request": "launch",

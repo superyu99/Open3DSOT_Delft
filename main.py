@@ -81,7 +81,7 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
-    # for i in range(0,len(train_data),50):
+    # for i in range(0,len(train_data)):
     #     data = train_data.__getitem__(i)
         # center = data["box_label"][:3]
         # size = data["bbox_size"]
@@ -113,7 +113,7 @@ if not cfg.test:
                          callbacks=[checkpoint_callback],
                          default_root_dir=cfg.log_dir,
                          check_val_every_n_epoch=cfg.check_val_every_n_epoch,
-                         num_sanity_val_steps=2,
+                        #  num_sanity_val_steps=2,
                          gradient_clip_val=cfg.gradient_clip_val,
                          fast_dev_run=False)
     trainer.fit(net, train_loader, val_loader, ckpt_path=cfg.checkpoint)
