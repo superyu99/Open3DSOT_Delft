@@ -138,6 +138,125 @@ class BaseModel(pl.LightningModule):
                                             'precision': self.prec.compute()},
                                            global_step=self.global_step)
 
+class BaseModelImage(pl.LightningModule):
+    def __init__(self, config=None, **kwargs):
+        super().__init__()
+        if config is None:
+            config = EasyDict(kwargs)
+        self.config = config
+
+        # testing metrics
+        self.prec = TorchPrecision()
+        self.success = TorchSuccess()
+
+    def configure_optimizers(self):
+        if self.config.optimizer.lower() == 'sgd':
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.config.lr, momentum=0.9, weight_decay=self.config.wd)
+        else:
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.config.lr, weight_decay=self.config.wd,
+                                         betas=(0.5, 0.999), eps=1e-06)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.config.lr_decay_step,
+                                                    gamma=self.config.lr_decay_rate)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+    def compute_loss(self, data, output):
+        raise NotImplementedError
+
+    def build_input_dict(self, sequence, frame_id, results_bbs, **kwargs):
+        raise NotImplementedError
+
+    def evaluate_one_sample(self, data_dict, ref_box):
+        end_points = self(data_dict) #调用模型，获得结果
+
+        estimation_box = end_points['estimation_boxes']
+        estimation_box_cpu = estimation_box.squeeze(0).detach().cpu().numpy()
+
+        if len(estimation_box.shape) == 3:
+            best_box_idx = estimation_box_cpu[:, 4].argmax()
+            estimation_box_cpu = estimation_box_cpu[best_box_idx, 0:4]
+
+        candidate_box = points_utils.getOffsetBB(ref_box, estimation_box_cpu, degrees=self.config.degrees,
+                                                 use_z=self.config.use_z,
+                                                 limit_box=self.config.limit_box)
+        return candidate_box
+
+    def evaluate_one_sequence(self, sequence):
+        """
+        :param sequence: a sequence of annos {"pc": pc, "3d_bbox": bb, 'meta': anno}
+        :return:
+        """
+        ious = []
+        distances = []
+        results_bbs = []
+        for frame_id in range(len(sequence)):  # tracklet
+            this_bb = sequence[frame_id]["3d_bbox"]
+            if frame_id == 0:
+                # the first frame
+                results_bbs.append(this_bb)
+            else:
+
+                # construct input dict
+                data_dict, ref_bb = self.build_input_dict(sequence, frame_id, results_bbs)
+                # run the tracker
+                candidate_box = self.evaluate_one_sample(data_dict, ref_box=ref_bb)
+                results_bbs.append(candidate_box)
+
+            this_overlap = estimateOverlap(this_bb, results_bbs[-1], dim=self.config.IoU_space,
+                                           up_axis=self.config.up_axis)
+            this_accuracy = estimateAccuracy(this_bb, results_bbs[-1], dim=self.config.IoU_space,
+                                             up_axis=self.config.up_axis)
+            ious.append(this_overlap)
+            distances.append(this_accuracy)
+
+            # --------写出测试结果到文件---------------
+            # 获取 frame_id
+            frame_id = int(sequence[frame_id]['meta']['frame'])
+            # 获取预测结果的坐标值
+            pred_coords = results_bbs[-1].corners().T.reshape(-1)
+            # 获取真值的坐标值
+            gt_coords = this_bb.corners().T.reshape(-1)
+            # 将 frame_id、预测结果和真值合并为一个数组
+            output_data = np.hstack(([frame_id], pred_coords, gt_coords))
+            # 创建格式化字符串
+            fmt_str = "{:6.0f}, " + ", ".join(["{:15.8f}"] * 48)
+            # 将数据写入文件
+            with open('./track_result_radar_alltest_{}.txt'.format("Car"), 'a+') as f:
+                f.write(fmt_str.format(*output_data))
+                f.write('\n')
+            # --------写出测试结果到文件 end------------
+
+        return ious, distances, results_bbs
+
+    def validation_step(self, batch, batch_idx):
+        sequence = batch[0]  # unwrap the batch with batch size = 1
+        ious, distances, *_ = self.evaluate_one_sequence(sequence)
+        # update metrics
+        self.success(torch.tensor(ious, device=self.device))
+        self.prec(torch.tensor(distances, device=self.device))
+        self.log('success/test', self.success, on_step=True, on_epoch=True)
+        self.log('precision/test', self.prec, on_step=True, on_epoch=True)
+
+    def on_validation_epoch_end(self):
+        self.logger.experiment.add_scalars('metrics/test',
+                                           {'success': self.success.compute(),
+                                            'precision': self.prec.compute()},
+                                           global_step=self.global_step)
+
+    def test_step(self, batch, batch_idx):
+        sequence = batch[0]  # unwrap the batch with batch size = 1
+        ious, distances, result_bbs = self.evaluate_one_sequence(sequence)
+        # update metrics
+        self.success(torch.tensor(ious, device=self.device))
+        self.prec(torch.tensor(distances, device=self.device))
+        self.log('success/test', self.success,  on_epoch=True)
+        self.log('precision/test', self.prec,  on_epoch=True)
+        return result_bbs
+
+    def on_test_epoch_end(self):
+        self.logger.experiment.add_scalars('metrics/test',
+                                           {'success': self.success.compute(),
+                                            'precision': self.prec.compute()},
+                                           global_step=self.global_step)
 
 class MatchingBaseModel(BaseModel):
 
@@ -403,7 +522,7 @@ class MotionBaseModelRadarLidar(BaseModel):
                                                                               device=self.device)})
         return data_dict, results_bbs[-1]
     
-class MotionBaseModelImage(BaseModel):
+class MotionBaseModelImage(BaseModelImage):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.save_hyperparameters()

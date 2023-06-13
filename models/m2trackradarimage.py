@@ -86,9 +86,17 @@ class M2TRACKRADARIMAGE(base_model.MotionBaseModelImage):
         # -------------------------------- image --------------------------------------------------------
         self.hidden_dim = getattr(config, 'hidden_dim', 256)
         self.num_queries = getattr(config, 'num_queries', 1) #1 仅需预测一个偏移
-        self.query_embed = nn.Embedding(self.num_queries, self.hidden_dim * 2) #！！！50,512
+        self.query_embed = nn.Embedding(self.num_queries, self.hidden_dim * 2) #！！！1,512
+        
 
         self.image_backbone = build_backbone(config)
+        self.input_proj = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv2d(self.image_backbone.num_channels[0], self.hidden_dim, kernel_size=1),
+                    nn.GroupNorm(32, self.hidden_dim),
+                )])
+
+        self.reference_points = nn.Linear(self.hidden_dim, 2)
         self.image_aware_transformer = ImageAwareTransformer()
 
 
@@ -109,9 +117,17 @@ class M2TRACKRADARIMAGE(base_model.MotionBaseModelImage):
         #-------------------------image-----------------------------------
         image_prev = input_dict["prev_masked_image"].permute(0,3,1,2) #CHW
         image_this = input_dict["this_masked_image"].permute(0,3,1,2) #CHW
-        prev_img_feature,pos = self.image_backbone(image_prev)
-        this_img_feature,pos = self.image_backbone(image_this)
+        prev_img_feature,prev_img_pos = self.image_backbone(image_prev) #torch.Size([2, 1024, 76, 121])
+        this_img_feature,this_img_pos = self.image_backbone(image_this) #torch.Size([2, 1024, 76, 121])
 
+        feat_prev,mask_prev = prev_img_feature[0].decompose()
+        feat_this,mask_this = this_img_feature[0].decompose()
+
+        feat = feat_this - feat_prev
+        pos = this_img_pos[0] - prev_img_pos[0]
+
+
+        src = self.input_proj[0](feat)
 
         #-------------------------image end-------------------------------
         #-------------------------point-----------------------------------
@@ -141,8 +157,30 @@ class M2TRACKRADARIMAGE(base_model.MotionBaseModelImage):
 
         point_feature = self.mini_pointnet(mask_points) #用于提取点特征 [B, 256]
 
+        #--------------------------transformer融合-----------------------------
+        query_embed = self.query_embed.weight #1*512
+        #     tgt,  #query
+        #     img_feature,  #图像特征,也就是SRC
+        #     image_pos,  #图像pos
+        #     tgt_pos_embed,  #与query同源的pos
+        #     points_embed,  #points backbone的特征
+        query_embed, tgt = torch.split(query_embed, self.hidden_dim, dim=1)
+        tgt = tgt.unsqueeze(0).expand(B, -1, -1) #torch.Size([2, 50, 256]),为每一个batch都复制一份
+        reference_points = self.reference_points(query_embed).sigmoid() #torch.Size([2, 50, 2]) 参考点竟然是由query生成的
+
+        query = self.image_aware_transformer(
+            tgt,
+            src,
+            pos,
+            query_embed,
+            point_feature,
+            reference_points,
+        )
+        #--------------------------transformer融合-----------------------------
+
         # motion state prediction
-        motion_pred = self.motion_mlp(point_feature)  # B,4 这里的输出是 delta box，即为两个box之间的motion
+        # motion_pred = self.motion_mlp(point_feature)  # B,4 这里的输出是 delta box，即为两个box之间的motion
+        motion_pred = self.motion_mlp(query.squeeze(1))  # B,4 这里的输出是 delta box，即为两个box之间的motion
         if self.use_motion_cls: #用于监督
             motion_state_logits = self.motion_state_mlp(point_feature)  # B,2
             motion_mask = torch.argmax(motion_state_logits, dim=1, keepdim=True)  # B,1

@@ -1,7 +1,7 @@
 #data
 dataset: delft_image
-# path: /data/public_dataset/delft/view_of_delft_PUBLIC
-path: /DISK_F/view_of_delft_PUBLIC
+path: /data/public_dataset/delft/view_of_delft_PUBLIC
+# path: /DISK_F/view_of_delft_PUBLIC
 category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
@@ -51,7 +51,7 @@ IoU_space: 3
 
 #training
 batch_size: 100
-workers: 16
+workers: 4
 epoch: 180
 from_epoch: 0
 lr: 0.001
