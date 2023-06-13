@@ -113,7 +113,7 @@ if not cfg.test:
                          callbacks=[checkpoint_callback],
                          default_root_dir=cfg.log_dir,
                          check_val_every_n_epoch=cfg.check_val_every_n_epoch,
-                        #  num_sanity_val_steps=2,
+                         num_sanity_val_steps=2,
                          gradient_clip_val=cfg.gradient_clip_val,
                          fast_dev_run=False)
     trainer.fit(net, train_loader, val_loader, ckpt_path=cfg.checkpoint)

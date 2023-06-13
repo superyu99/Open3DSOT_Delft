@@ -56,10 +56,10 @@ def apply_mask_with_smooth_edges(img, corners_img, sigma=10):
     return result
 
 #--------------------debug 显示用--------------------------------
-import numpy as np
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib
+# matplotlib.use('TkAgg')
+# import matplotlib.pyplot as plt
 
 
 
@@ -207,7 +207,7 @@ class DelftImageDataset(base_dataset.BaseDataset):
     def _build_scene_list(split):
         if "TRAIN" in split.upper():  # Training SET
             if "TINY" in split.upper():
-                scene_names = list(range(8, 9))  # tiny 片段1，298帧
+                scene_names = list(range(0, 3))  # tiny 片段1，298帧
             else:
                 scene_names = list(range(0, 7))   # origin
                 # scene_names = list(range(7, 11)) #val 有标签

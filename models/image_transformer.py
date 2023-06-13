@@ -22,14 +22,23 @@ class ImageAwareTransformer(pl.LightningModule):
         self.d_model = d_model #256
         self.nhead = nhead #8
 
+
         encoder_layer = VisualEncoderLayer(  #MSAttention
             d_model, dim_feedforward, dropout, activation, num_feature_levels,
             nhead, enc_n_points)
         self.encoder = VisualEncoder(encoder_layer, num_encoder_layers)
 
+        #普通multihead attention
         decoder_layer = DecoderLayer(d_model, dim_feedforward, dropout, #普通多头注意力机制
                                      activation, nhead)
         self.decoder = Decoder(decoder_layer, num_decoder_layers)
+
+      
+
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
 
     def forward(
             self,
@@ -38,14 +47,42 @@ class ImageAwareTransformer(pl.LightningModule):
             image_pos,  #图像pos
             tgt_pos_embed,  #与query同源的pos
             points_embed,  #points backbone的特征
+            reference_points,
     ):
         # 图像先做cross attention
-        bs, c, h, w = src.shape
+        bs, c, h, w = img_feature.shape
         spatial_shape = (h, w)
-        src = src.flatten(2).transpose(1, 2)  #调整为：B*N*C
-        pos_embed = pos_embed.flatten(2).transpose(1, 2)  #调整为：B*N*C
+        img_feature = img_feature.flatten(2).transpose(1, 2)  #调整为：B*N*C
+        image_pos = image_pos.flatten(2).transpose(1, 2)  #调整为：B*N*C
 
-        return 1
+        # encoder 参数：
+        # src, 
+        # spatial_shapes, 
+        # level_start_index, 
+        # valid_ratios, 
+        # pos=None, 
+        # padding_mask=None):
+        spatial_shape = torch.as_tensor(spatial_shape, dtype=torch.long, device=img_feature.device).unsqueeze(0)
+        level_start_index = spatial_shape.new_zeros((1, ))
+        valid_ratios = torch.ones(bs, 4, 2, dtype=torch.long, device=img_feature.device)
+
+
+        memory = self.encoder(
+            img_feature,
+            spatial_shape,
+            level_start_index,
+            valid_ratios,
+            image_pos,
+        )
+
+        points_embed = points_embed.unsqueeze(1)
+        tgt = self.decoder(
+            tgt,
+            tgt_pos_embed,
+            memory,
+            points_embed)
+
+        return tgt
 
 
 
@@ -130,10 +167,16 @@ class DecoderLayer(pl.LightningModule):
                  dropout=0.1, activation="relu",
                  n_heads=8):
         super().__init__()
-        # depth cross attention
-        self.cross_attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+        # point cross attention
+        self.cross_attn_point = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(d_model)
+
+        # img cross attention
+        self.cross_attn_img = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(d_model)
+
 
         #ffn out
         self.linear1 = nn.Linear(d_model, d_ffn)
@@ -159,15 +202,24 @@ class DecoderLayer(pl.LightningModule):
         self,
         tgt,
         query_pos,  #这个应该是另一半直接加上来作为pos embed
+        image_embed,
         points_embed,
     ):
         #普通的 multihead attention
-        tgt2 = self.cross_attn(
-            tgt,  #Q:[2, 1, 256] NBC 这个输入应该是：个数、batch、维度C [1 B C]
-            self.with_pos_embed(points_embed, query_pos),  #K [1, 2, 256] N,B,C
-            self.with_pos_embed(points_embed,
-                                query_pos),  #V [1, 2, 256] N,B,C 
-        )
+        tgt2 = self.cross_attn_img(
+            self.with_pos_embed(tgt,query_pos).transpose(0, 1),  #Q:[2, 1, 256] NBC 这个输入应该是：个数、batch、维度C [1 B C]
+            image_embed.transpose(0, 1),  #K [1, 2, 256] N,B,C
+            image_embed.transpose(0, 1),  #V [1, 2, 256] N,B,C 
+        )[0].transpose(0, 1)
+        tgt = tgt + self.dropout(tgt2)  #跳连
+        tgt = self.norm(tgt)
+
+        #普通的 multihead attention
+        tgt2 = self.cross_attn_point(
+            self.with_pos_embed(tgt,query_pos).transpose(0, 1),  #Q:[2, 1, 256] NBC 这个输入应该是：个数、batch、维度C [1 B C]
+            points_embed.transpose(0, 1),  #K [1, 2, 256] N,B,C
+            points_embed.transpose(0, 1),  #V [1, 2, 256] N,B,C 
+        )[0].transpose(0, 1)
         tgt = tgt + self.dropout(tgt2)  #跳连
         tgt = self.norm(tgt)
 
@@ -182,13 +234,14 @@ class Decoder(pl.LightningModule):
         self.num_layers = num_layers
 
 
-    def forward(self, tgt, query_pos, points_embed):
+    def forward(self, tgt, query_pos, image_embed, points_embed):
         output = tgt
 
-        for layer in enumerate(self.layers):
+        for lid, layer in enumerate(self.layers):
             output = layer(
                 output,
                 query_pos,  #50*256可学习参数
+                image_embed,
                 points_embed,
             )
         return output
