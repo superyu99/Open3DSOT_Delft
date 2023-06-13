@@ -70,3 +70,6 @@ venv/
 *.jpg 
 *.pth
 
+#spicify file
+track_result_radar_alltest_Car.txt
+
