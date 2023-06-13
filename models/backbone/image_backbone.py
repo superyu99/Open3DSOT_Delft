@@ -77,9 +77,9 @@ class BackboneBase(nn.Module):
             self.strides = [8, 16, 32]
             self.num_channels = [512, 1024, 2048]
         else:
-            return_layers = {'layer4': "0"}
-            self.strides = [32]
-            self.num_channels = [2048]
+            return_layers = {'layer3': "0"} # 如果只有一层返回值，那就选折衷的，layer3
+            self.strides = [16]
+            self.num_channels = [1024]
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
 
     def forward(self, images):
@@ -114,8 +114,11 @@ class Joiner(nn.Sequential):
         self.num_channels = backbone.num_channels
 
     def forward(self, images):
-        out = self[0](images)
-        
+        xs = self[0](images)
+        out: List[NestedTensor] = []
+        pos = []
+        for name, x in sorted(xs.items()):
+            out.append(x)
 
         # position encoding
         for x in out:
