@@ -123,7 +123,7 @@ def transform_3dbox(box, trans_matrix):
     return transformed_box
 #---------------------utils end-------------------------------
 
-class DelftRadarDataset(base_dataset.BaseDataset):
+class DelftRadarDatasetVdxdy(base_dataset.BaseDataset):
     def __init__(self, path, split, category_name="Car", **kwargs):
         super().__init__(path, split, category_name, **kwargs)
         self.split = split
@@ -228,11 +228,13 @@ class DelftRadarDataset(base_dataset.BaseDataset):
         for idx, row in tracklet_df.iterrows():
             frame = row['frame']
             box = self.get_radarbox(row,frame)
+            # box[3:6] *= 1.25
             # #统计box信息
             # with open('./%s_all_box_stats.txt'%(str(self.class_names[0])), 'a+') as f:
             #     print(f"{box[0]},{box[1]},{box[2]}",file=f)
             corners = boxes_to_corners_3d(box.reshape(-1,7))
             points = self.get_radar(frame)
+
             in_box_num = np.count_nonzero(in_hull(points,corners.reshape(-1,3)))
             if not x_limit[0] <= box[0] <= x_limit[1] or not y_limit[0] <= box[1] <= y_limit[1] or not z_limit[0] <= box[2] <= z_limit[1] or in_box_num < 1:  # 点数小于1，不参与训练
                 out_range_indices.append(idx) 
@@ -552,6 +554,22 @@ class DelftRadarDataset(base_dataset.BaseDataset):
             frames = [self._get_frame_from_anno(seq_annos[f_id]) for f_id in frame_ids] #这里认为frame_ids是每一个tracklet独有的，每个序列都是从0开始
 
         return frames
+    
+    #此处可能会有BUG：dxdy的计算应该是在雷达坐标系还是在radar坐标系本身？现在是在lidar坐标系计算，因为lidar坐标系是原点坐标系
+    def get_vdxdy(self,pc):
+        compensated_radial_velocity = pc[:, 4] #此处使用未补偿的速度，因为我们的预测任务始终是在当前时刻的雷达坐标系，并不涉及世界坐标系
+        pc_radar = pc[:, 0:3]
+
+
+
+        radial_unit_vectors = pc_radar / np.linalg.norm(pc_radar, axis=1, keepdims=True)
+        velocity_vectors = compensated_radial_velocity[:, None] * radial_unit_vectors
+
+        # 求在xy上的分量
+        xy_velocity_vectors = velocity_vectors[:, :2]
+
+        return np.concatenate((xy_velocity_vectors,radial_unit_vectors),axis=1) #返回的是dx dy 与 径向方向 N*5
+
     def get_radar(self,frame_id):
         img_name = f"{frame_id:05d}"
         frame_loader = FrameDataLoader(kitti_locations=self.DelftLocation,
@@ -582,7 +600,12 @@ class DelftRadarDataset(base_dataset.BaseDataset):
         radar_points_in_origin = transform_pcl_with_all_feature(points=frame_loader.radar_data,
                                                   transform_matrix=transform_matrices['radar'])
         
-        return radar_points_in_origin
+        #此处可能会有BUG：dxdy的计算应该是在雷达坐标系还是在radar坐标系本身？现在是在lidar坐标系计算，因为lidar坐标系是原点坐标系
+        vdxdy = self.get_vdxdy(radar_points_in_origin)
+
+        points = np.concatenate((radar_points_in_origin,vdxdy),axis=1) #原始所有特征，拼接了dxdy的速度
+
+        return points
 
     def get_lidar(self,frame_id):
         img_name = f"{frame_id:05d}"
@@ -735,7 +758,7 @@ class DelftRadarDataset(base_dataset.BaseDataset):
         size = [dy,dx,dz]
         ry = -box[6] 
 
-        pc = RadarCloud(self.get_radar(frame).reshape(-1, 7).T) #此处得到原始数据：x y z RCS speed compensted_speed
+        pc = RadarCloud(self.get_radar(frame).reshape(-1, 12).T) 
         
         orientation = Quaternion(
                 axis=[0, 0, -1], radians=ry)

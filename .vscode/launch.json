@@ -107,6 +107,26 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            "name": "main_delft_radar_vdxdy", //copy from main_delft_radar
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_track_delft_radar_vdxdy.yaml",
+                "--batch_size",
+                "2",
+                "--epoch",
+                "20",
+                // "--test",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "test_delft_lidar",
             "type": "python",
             "request": "launch",
@@ -133,7 +153,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--cfg",
-                "cfgs/M2_track_delft_radar.yaml",
+                "cfgs/M2_track_delft_radar_vdxdy.yaml",
                 "--checkpoint",
                 "/workspace/sot/Open3DSOT/output/M2RADAR_car/lightning_logs/version_0/checkpoints/epoch=62-step=22113.ckpt",
                 "--test",
