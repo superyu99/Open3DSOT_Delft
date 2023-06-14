@@ -208,22 +208,22 @@ class BaseModelImage(pl.LightningModule):
             ious.append(this_overlap)
             distances.append(this_accuracy)
 
-            # --------写出测试结果到文件---------------
-            # 获取 frame_id
-            frame_id = int(sequence[frame_id]['meta']['frame'])
-            # 获取预测结果的坐标值
-            pred_coords = results_bbs[-1].corners().T.reshape(-1)
-            # 获取真值的坐标值
-            gt_coords = this_bb.corners().T.reshape(-1)
-            # 将 frame_id、预测结果和真值合并为一个数组
-            output_data = np.hstack(([frame_id], pred_coords, gt_coords))
-            # 创建格式化字符串
-            fmt_str = "{:6.0f}, " + ", ".join(["{:15.8f}"] * 48)
-            # 将数据写入文件
-            with open('./track_result_radar_alltest_{}.txt'.format("Car"), 'a+') as f:
-                f.write(fmt_str.format(*output_data))
-                f.write('\n')
-            # --------写出测试结果到文件 end------------
+            # # --------写出测试结果到文件---------------
+            # # 获取 frame_id
+            # frame_id = int(sequence[frame_id]['meta']['frame'])
+            # # 获取预测结果的坐标值
+            # pred_coords = results_bbs[-1].corners().T.reshape(-1)
+            # # 获取真值的坐标值
+            # gt_coords = this_bb.corners().T.reshape(-1)
+            # # 将 frame_id、预测结果和真值合并为一个数组
+            # output_data = np.hstack(([frame_id], pred_coords, gt_coords))
+            # # 创建格式化字符串
+            # fmt_str = "{:6.0f}, " + ", ".join(["{:15.8f}"] * 48)
+            # # 将数据写入文件
+            # with open('./track_result_radar_alltest_{}.txt'.format("Car"), 'a+') as f:
+            #     f.write(fmt_str.format(*output_data))
+            #     f.write('\n')
+            # # --------写出测试结果到文件 end------------
 
         return ious, distances, results_bbs
 
