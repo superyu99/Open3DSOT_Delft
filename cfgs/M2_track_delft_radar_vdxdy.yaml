@@ -1,7 +1,7 @@
 #data
 dataset: delft_radar_vdxdy
-# path: /data/public_dataset/delft/view_of_delft_PUBLIC
-path: /DISK_F/view_of_delft_PUBLIC
+path: /data/public_dataset/delft/view_of_delft_PUBLIC
+# path: /DISK_F/view_of_delft_PUBLIC
 category_name: Car # [Car, Van, Pedestrian, Cyclist, All]
 bb_scale: 1.25
 bb_offset: 2
