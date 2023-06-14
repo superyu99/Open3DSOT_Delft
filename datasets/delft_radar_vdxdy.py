@@ -519,7 +519,7 @@ class DelftRadarDatasetVdxdy(base_dataset.BaseDataset):
                         number += len(tracklet_anno)  # 每条轨迹对应帧index的统计        
                         self.first_frame_index.append(number)
                         self.length_per_tracklet.append(len(tracklet_anno))
-                if "TEST" in self.split.upper(): #只有测试集作特殊筛选
+                if "XTEST" in self.split.upper(): #只有测试集作特殊筛选
                     seq_tracklet,_ = self.process_tracklets_V3(seq_tracklet,all_track_id,[-100,100],[-100,100],[-100,100],1) #1是最短序列长度
                     if len(seq_tracklet) == 0: #空表就继续
                         continue

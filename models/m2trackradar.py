@@ -28,7 +28,8 @@ class M2TRACKRADAR(base_model.MotionBaseModel):
         # 3：其他特征
         # 1：时间戳
         # 1：概率
-        self.seg_pointnet = SegPointNet(input_channel=3 + 3 + 1 + 1 + (9 if self.box_aware else 0), #此处注意输入维度
+        # 5: 速度及其方向
+        self.seg_pointnet = SegPointNet(input_channel=3 + 3 + 1 + 1 + 5 + (9 if self.box_aware else 0), #此处注意输入维度
                                         per_point_mlp1=[64, 64, 64, 128, 1024],
                                         per_point_mlp2=[512, 256, 128, 128],
                                         output_size=2 + (9 if self.box_aware else 0))
@@ -36,7 +37,8 @@ class M2TRACKRADAR(base_model.MotionBaseModel):
         # 3：xyz
         # 3：其他特征
         # 1：时间戳
-        self.mini_pointnet = MiniPointNet(input_channel=3 + 3 + 1 + (9 if self.box_aware else 0), ##此处注意输入维度
+        # 5：速度及其方向
+        self.mini_pointnet = MiniPointNet(input_channel=3 + 3 + 1 + 5 + (9 if self.box_aware else 0), ##此处注意输入维度
                                           per_point_mlp=[64, 128, 256, 512],
                                           hidden_mlp=[512, 256],
                                           output_size=-1)
@@ -102,9 +104,9 @@ class M2TRACKRADAR(base_model.MotionBaseModel):
         seg_out = self.seg_pointnet(x) #torch.Size([1, 11, 1024])
         seg_logits = seg_out[:, :2, :]  # B,2,N #选出概率
         pred_cls = torch.argmax(seg_logits, dim=1, keepdim=True)  # B,1,N
-        # 7 的解释，3+3+1 3：xyz， 3：其他特征 1：时间戳
+        # 7 的解释，3+3+1+5 3：xyz， 3：其他特征 1：时间戳 5 速度及其方向
         # 4 的解释，3+1 3：xyz，  1：时间戳
-        mask_points = x[:, :7, :] * pred_cls #取出原始特征，赋上权重，此处注意维度，输入多了3个维度
+        mask_points = x[:, :12, :] * pred_cls #取出原始特征，赋上权重，此处注意维度，输入多了3个维度
         mask_xyz_t0 = mask_points[:, :3, :N // 2]  # B,3,N//2
         mask_xyz_t1 = mask_points[:, :3, N // 2:]
         if self.box_aware:
