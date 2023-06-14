@@ -14,9 +14,10 @@ class RadarCloud: #这个类喜欢使用转置之后的格式对待点云
         Class for manipulating and viewing point clouds.
         :param points: <np.float: feature_num, n>. Input point cloud matrix.
         """
-        #all  ['x', 'y', 'z', 'RCS','v_r','v_r_compensated','time'],
-        #used ['x', 'y', 'z', 'RCS','v_r','v_r_compensated'],
-        usedfeature_index = [0,1,2,3,4,5]
+        #all  ['x', 'y', 'z', 'RCS','v_r','v_r_compensated','time',vdx,vdy, dirx,diry,dirz],
+        #       0    1    2     3     4      5                 6    7   8    9    10   11
+        #used ['x', 'y', 'z', 'RCS','v_r','v_r_compensated',vdx,vdy],
+        usedfeature_index = [0,1,2,3,4,5,7,8,9,10,11]
 
         self.points = points
         self.points = self.points[usedfeature_index, :] #根据要使用的featureindex提取要用的那些特征

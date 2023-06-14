@@ -81,6 +81,7 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
+    # train_data.dataset.tracklet_anno_list
     # for i in range(0,len(train_data)):
     #     data = train_data.__getitem__(i)
         # center = data["box_label"][:3]
