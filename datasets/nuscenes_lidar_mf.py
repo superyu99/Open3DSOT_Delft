@@ -16,6 +16,8 @@ from pyquaternion import Quaternion
 from datasets import points_utils, base_dataset
 from datasets.data_classes import PointCloud
 
+from datasets.misc_utils import get_history_frame_ids_and_masks
+
 import vis_tool as vt
 
 general_to_tracking_class = {"animal": "void / ignore",
@@ -57,7 +59,7 @@ tracking_to_general_class = {
     'truck': ['vehicle.truck']}
 
 
-class NuScenesDataset(base_dataset.BaseDataset):
+class NuScenesMFDataset(base_dataset.BaseDataset):
     def __init__(self, path, split, category_name="Car", version='v1.0-trainval', **kwargs):
         super().__init__(path, split, category_name, **kwargs)
         self.nusc = NuScenes(version=version, dataroot=path, verbose=False)
@@ -69,6 +71,9 @@ class NuScenesDataset(base_dataset.BaseDataset):
         self.tracklet_anno_list, self.tracklet_len_list = self._build_tracklet_anno()
         if self.preloading:
             self.training_samples = self._load_data()
+
+        #多帧：
+        self.hist_num = kwargs.get('hist_num', 1) #支持0-N之间的数
 
     def filter_instance(self, split, category_name=None, min_points=-1):
         """
@@ -170,6 +175,6 @@ class NuScenesDataset(base_dataset.BaseDataset):
         pc.translate(np.array(poserecord['translation']))
 
         pc = PointCloud(points=pc.points)
-        if self.preload_offset > 0:
-            pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset)
+        # if self.preload_offset > 0: #临时屏蔽
+        #     pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset) #临时屏蔽
         return {"pc": pc, "3d_bbox": bb, 'meta': anno}

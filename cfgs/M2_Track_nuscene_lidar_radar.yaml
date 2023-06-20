@@ -1,9 +1,8 @@
 #data
-dataset: nuscenes
-# path:  /workspace/sot/Open3DSOT/data/nuscenes
-path: /data/aronlin/Open3DSOT/data/nuscenes
+dataset: nuscenes_lidar_radar
+path:  /workspace/sot/Open3DSOT/data/nuscenes
 # version: v1.0-trainval
-version: v1.0-trainval
+version: v1.0-mini
 category_name: Car
 bb_scale: 1.25
 bb_offset: 2
@@ -17,7 +16,7 @@ key_frame_only: True
 train_split: train_track
 val_split: val
 test_split: val
-train_type: train_motion
+train_type: train_motion_cross_modal
 num_candidates: 4
 motion_threshold: 0.15
 use_augmentation: True

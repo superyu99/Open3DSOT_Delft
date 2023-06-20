@@ -28,6 +28,82 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            "name": "main_nuscenes",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_Track_nuscene.yaml",
+                "--batch_size",
+                "2",
+                "--epoch",
+                "1"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "main_nuscenes_mf",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_Track_nuscene_mf.yaml",
+                "--batch_size",
+                "16",
+                "--epoch",
+                "1"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "test_nuscenes_mf",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--cfg",
+                "cfgs/M2_Track_nuscene_mf.yaml",
+                "--checkpoint",
+                "/workspace/sot/Open3DSOT/lightning_logs/version_51/checkpoints/epoch=0-step=407.ckpt",
+                "--test",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "main_nuscenes_lidar_radar",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_Track_nuscene_lidar_radar.yaml",
+                "--batch_size",
+                "2",
+                "--epoch",
+                "1"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "main_delft_lidar",
             "type": "python",
             "request": "launch",
@@ -173,7 +249,7 @@
                 "--cfg",
                 "cfgs/M2_track_kitti.yaml",
                 "--checkpoint",
-                "/workspace/mot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
+                "/workspace/sot/Open3DSOT/pretrained_models/mmtrack_kitti_car.ckpt",
                 "--test",
               
             ],

@@ -373,6 +373,36 @@ def apply_augmentation(pc, box, wlh_factor=1.25): #把box以及点云同时作�
     new_pc.points[:, in_box_mask] = new_in_box_pc.points
     return new_pc, new_box
 
+#同时对lidar和radar应用一致的增强，以保持模态对齐
+def apply_augmentation_radar_lidar(lidar_pc, lidar_box, radar_pc, radar_box, wlh_factor=1.25): #把box以及点云同时作随机平移和翻转
+    rand_trans = np.random.uniform(low=-0.3, high=0.3, size=3)
+    rand_rot = np.random.uniform(low=-10, high=10)
+    flip_x, flip_y = np.random.choice([True, False], size=2, replace=True)
+    #---------------lidar---------------------------
+    in_box_mask_lidar = nuscenes.utils.geometry_utils.points_in_box(lidar_box, lidar_pc.points[0:3,:], wlh_factor=wlh_factor) #应当只考虑前三个维度
+
+    in_box_pc_lidar = copy.deepcopy(lidar_pc) #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
+    in_box_pc_lidar.points = lidar_pc.points[:, in_box_mask_lidar] #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
+
+    new_in_box_pc_lidar, new_box_lidar = apply_transform(in_box_pc_lidar, lidar_box, rand_trans, rand_rot, flip_x, flip_y)
+
+    new_pc_lidar = copy.deepcopy(lidar_pc)
+    new_pc_lidar.points[:, in_box_mask_lidar] = new_in_box_pc_lidar.points
+    #---------------lidar end---------------------------
+
+    #---------------radar---------------------------
+    in_box_mask_radar = nuscenes.utils.geometry_utils.points_in_box(radar_box, radar_pc.points[0:3,:], wlh_factor=wlh_factor) #应当只考虑前三个维度
+
+    in_box_pc_radar = copy.deepcopy(radar_pc) #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
+    in_box_pc_radar.points = radar_pc.points[:, in_box_mask_radar] #我的实现，此处inboxpc保留了其他特征，与纯点云兼容
+
+    new_in_box_pc_radar, new_box_radar = apply_transform(in_box_pc_radar, radar_box, rand_trans, rand_rot, flip_x, flip_y)
+
+    new_pc_radar = copy.deepcopy(radar_pc)
+    new_pc_radar.points[:, in_box_mask_radar] = new_in_box_pc_radar.points
+    #---------------radar end---------------------------
+    return new_pc_lidar, new_box_lidar, new_pc_radar, new_box_radar
+
 
 def roty_batch_tensor(t):
     input_shape = t.shape
