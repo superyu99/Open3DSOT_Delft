@@ -81,8 +81,15 @@ else:
 if not cfg.test:
     # dataset and dataloader
     train_data = get_dataset(cfg, type=cfg.train_type, split=cfg.train_split)
-    # train_data.dataset.tracklet_anno_list
-    # for i in range(0,len(train_data)):
+    # tracks =  train_data.dataset.tracklet_anno_list
+    # for track in tracks:
+    #     for sample in track:
+    #         info = train_data.dataset._get_frame_from_anno_data(sample)
+            # points = info["pc"].points.T - info["3d_bbox"].center
+            # box = info["3d_bbox"].corners().T - info["3d_bbox"].center
+            # vt.show_scenes(hist_pointcloud=[points],bboxes=[box])#,gt_bbox=[prev_box.corners().T])
+
+    # for i in range(5350,len(train_data),1):
     #     data = train_data.__getitem__(i)
         # center = data["box_label"][:3]
         # size = data["bbox_size"]

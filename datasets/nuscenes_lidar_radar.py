@@ -8,13 +8,13 @@ import numpy as np
 import pickle
 import nuscenes
 from nuscenes.nuscenes import NuScenes
-from nuscenes.utils.data_classes import LidarPointCloud, Box
+from nuscenes.utils.data_classes import LidarPointCloud,RadarPointCloud, Box
 from nuscenes.utils.splits import create_splits_scenes
 
 from pyquaternion import Quaternion
 
 from datasets import points_utils, base_dataset
-from datasets.data_classes import PointCloud
+from datasets.data_classes import PointCloud, RadarCloud
 
 import vis_tool as vt
 
@@ -57,7 +57,7 @@ tracking_to_general_class = {
     'truck': ['vehicle.truck']}
 
 
-class NuScenesDataset(base_dataset.BaseDataset):
+class NuScenesLidarRadarDataset(base_dataset.BaseDataset):
     def __init__(self, path, split, category_name="Car", version='v1.0-trainval', **kwargs):
         super().__init__(path, split, category_name, **kwargs)
         self.nusc = NuScenes(version=version, dataroot=path, verbose=False)
@@ -104,11 +104,13 @@ class NuScenesDataset(base_dataset.BaseDataset):
                 ann_record = self.nusc.get('sample_annotation', curr_anno_token)
                 sample = self.nusc.get('sample', ann_record['sample_token'])
                 sample_data_lidar = self.nusc.get('sample_data', sample['data']['LIDAR_TOP'])
+                radar_names = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT']
+                sample_data_radar = [self.nusc.get('sample_data', sample['data'][radarname]) for radarname in radar_names]
 
                 curr_anno_token = ann_record['next']
                 if self.key_frame_only and not sample_data_lidar['is_key_frame']:
                     continue
-                track_anno.append({"sample_data_lidar": sample_data_lidar, "box_anno": ann_record})
+                track_anno.append({"sample_data_lidar": sample_data_lidar, "sample_data_radar":sample_data_radar, "box_anno": ann_record})
 
             list_of_tracklet_anno.append(track_anno) #track_anno是一个序列，list_of_tracklet_anno存储了所有序列
             list_of_tracklet_len.append(len(track_anno))
@@ -158,6 +160,7 @@ class NuScenesDataset(base_dataset.BaseDataset):
         box_anno = anno['box_anno']
         bb = Box(box_anno['translation'], box_anno['size'], Quaternion(box_anno['rotation']),
                  name=box_anno['category_name'], token=box_anno['token'])
+        #-----------------lidar------------------------------------
         pcl_path = os.path.join(self.path, sample_data_lidar['filename'])
         pc = LidarPointCloud.from_file(pcl_path)
 
@@ -165,11 +168,39 @@ class NuScenesDataset(base_dataset.BaseDataset):
         pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix)
         pc.translate(np.array(cs_record['translation']))
 
-        poserecord = self.nusc.get('ego_pose', sample_data_lidar['ego_pose_token'])
-        pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix)
-        pc.translate(np.array(poserecord['translation']))
+        # poserecord = self.nusc.get('ego_pose', sample_data_lidar['ego_pose_token'])
+        # pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix)
+        # pc.translate(np.array(poserecord['translation']))
 
         pc = PointCloud(points=pc.points)
-        if self.preload_offset > 0:
-            pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset)
-        return {"pc": pc, "3d_bbox": bb, 'meta': anno}
+        # if self.preload_offset > 0:
+        #     pc = points_utils.crop_pc_axis_aligned(pc, bb, offset=self.preload_offset)
+        #-----------------lidar end------------------------------------
+
+        #-----------------radar------------------------------------
+        sample_data_radar = anno['sample_data_radar'] #这是一个列表，装载了5个radar
+        radar_pcs = list()
+        for sample_data in sample_data_radar:
+            radar_pcl_path = os.path.join(self.path, sample_data['filename'])
+            radar_pc = RadarPointCloud.from_file(radar_pcl_path)
+            cs_record = self.nusc.get('calibrated_sensor', sample_data['calibrated_sensor_token'])
+            radar_pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix)
+            radar_pc.translate(np.array(cs_record['translation']))
+
+            # poserecord = self.nusc.get('ego_pose', sample_data['ego_pose_token'])
+            # radar_pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix)
+            # radar_pc.translate(np.array(poserecord['translation']))
+
+            radar_pcs.append(radar_pc.points.T) #N*18
+        radar_pc = np.vstack(radar_pcs) #请你拼接radar_pcs，形成N*18的整体numpy数组
+        radar_pc = RadarCloud(points=radar_pc.T) #18*N
+
+
+        # for one_radar in sample_data_radar:
+
+
+        #-----------------radar end------------------------------------
+
+
+        
+        return {"pc": pc, "radar_pc":radar_pc, "3d_bbox": bb, 'meta': anno}
