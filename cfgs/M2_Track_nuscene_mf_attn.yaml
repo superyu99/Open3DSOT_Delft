@@ -27,7 +27,7 @@ limit_num_points_in_prev_box: 1 #小于这个数量，认为是空box
 
 
 #model configuration
-net_model: m2trackmf
+net_model: m2trackmfattn
 box_aware: True
 
 #loss configuration
@@ -35,6 +35,10 @@ center_weight: 2
 angle_weight: 10.0
 seg_weight: 0.1
 bc_weight: 1
+
+#------attention纠正ref--------
+ref_center_weight: 0.2
+ref_angle_weight: 1
 
 motion_cls_seg_weight: 0.1
 

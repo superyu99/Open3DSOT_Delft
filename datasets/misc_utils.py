@@ -154,3 +154,100 @@ def update_results_bbs(results_bbs, valid_mask, new_refboxs):
 
 # test_update_results_bbs()
 #--------------------------------------------------------------
+
+#------------------------获取tensor版本的corners---------------------------
+import torch
+
+def _axis_angle_rotation(axis: str, angle):
+    """
+    Return the rotation matrices for one of the rotations about an axis
+    of which Euler angles describe, for each value of the angle given.
+
+    Args:
+        axis: Axis label "X" or "Y or "Z".
+        angle: any shape tensor of Euler angles in radians
+
+    Returns:
+        Rotation matrices as tensor of shape (..., 3, 3).
+    """
+
+    cos = torch.cos(angle)
+    sin = torch.sin(angle)
+    one = torch.ones_like(angle)
+    zero = torch.zeros_like(angle)
+
+    if axis == "X":
+        R_flat = (one, zero, zero, zero, cos, -sin, zero, sin, cos)
+    if axis == "Y":
+        R_flat = (cos, zero, sin, zero, one, zero, -sin, zero, cos)
+    if axis == "Z":
+        R_flat = (cos, -sin, zero, sin, cos, zero, zero, zero, one)
+
+    return torch.stack(R_flat, -1).reshape(angle.shape + (3, 3))
+
+def get_tensor_corners(center,wlh,theta,wlh_factor=1.0):
+        """
+        Returns the bounding box corners.
+        :param wlh_factor: <float>. Multiply w, l, h by a factor to inflate or deflate the box.
+        :return: <np.float: 3, 8>. First four corners are the ones facing forward.
+            The last four are the ones facing backwards.
+
+        """
+        w, l, h = wlh * wlh_factor
+
+        # 3D bounding box corners. (Convention: x points forward, y to the left, z up.)
+        x_corners = l / 2 * torch.tensor([1,  1,  1,  1, -1, -1, -1, -1], dtype=torch.float32, device=center.device)
+        y_corners = w / 2 * torch.tensor([1, -1, -1,  1,  1, -1, -1,  1], dtype=torch.float32, device=center.device)
+        z_corners = h / 2 * torch.tensor([1,  1, -1, -1,  1,  1, -1, -1], dtype=torch.float32, device=center.device)
+        corners = corners = torch.stack((x_corners, y_corners, z_corners), dim=0)
+
+        # Rotate
+        corners = _axis_angle_rotation("Z",-theta)@corners
+
+        # Translate
+        x, y, z = center
+        corners[0, :] = corners[0, :] + x
+        corners[1, :] = corners[1, :] + y
+        corners[2, :] = corners[2, :] + z
+
+        return corners
+
+# #测试程序
+# from datasets.data_classes import Box
+# from pyquaternion import Quaternion
+# import numpy as np
+# orientation = Quaternion(
+#                 axis=[0, 0, -1], radians=0.3)
+
+# bb = Box(np.array([1,1,1]), np.array([1,1,1]), orientation)
+
+# print(bb.corners().T)
+# print(get_tensor_corners(torch.tensor([1,1,1]),torch.tensor([1,1,1]),torch.tensor(0.3)).T)
+#---------------------------------------------------------------------------
+
+#---------------------------------------------------------------------------
+# 为corners tensor生成时间戳
+def create_corner_timestamps(B, H, corner_num=8):
+    """
+    为B*N*3的corners生成时间戳：当前帧在最后，历史帧在前面,-0.1,-0.2-0.3 ... 当前帧+0.1
+    N应该等于 (历史帧数量+1)*8 
+    返回的张量可以直接拼接在原始张量后面
+    """
+    N = (H + 1) * corner_num
+    timestamps = torch.zeros((B, N, 1))
+
+    for i in range(H):
+        timestamps[:, (i * corner_num):(i * corner_num) + corner_num] = -(i + 1) * 0.1
+
+    # 设置当前box的时间戳为0.1
+    timestamps[:, -corner_num:] = 0.1
+
+    return timestamps
+
+# B = 2  # 示例 batch 大小
+# H = 3  # 示例历史 box 数量
+# corner_num = 8  # 可选参数，默认为8
+
+# timestamps = create_corner_timestamps(B, H, corner_num)
+# print(timestamps)
+#---------------------------------------------------------------------------

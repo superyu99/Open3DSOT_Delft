@@ -282,7 +282,7 @@ class BaseModelMF(pl.LightningModule):
         self.logger.experiment.add_scalars('metrics/test',
                                            {'success': self.success.compute(),
                                             'precision': self.prec.compute()},
-                                           global_step=self.global_step)
+                                           global_step=self.current_epoch) #上报大指标直接用epoch
 
 class BaseModelImage(pl.LightningModule):
     def __init__(self, config=None, **kwargs):
@@ -605,6 +605,7 @@ class MotionBaseModelMF(BaseModelMF):
         prev_frames = [sequence[id] for id in prev_frame_ids]
         this_frame = sequence[frame_id]
         this_pc = this_frame['pc']
+        bbox_size = this_frame['3d_bbox'].wlh
         prev_pcs = [frame['pc'] for frame in prev_frames]
         ref_boxs = get_last_n_bounding_boxes(results_bbs,valid_mask)
         num_hist = len(valid_mask)
@@ -672,6 +673,7 @@ class MotionBaseModelMF(BaseModelMF):
         data_dict = {"points": torch.tensor(stack_points[None, :], device=self.device, dtype=torch.float32), #都要调整维度，生成B这个维度
                      "ref_boxs":torch.tensor(ref_boxs_np[None, :], device=self.device, dtype=torch.float32), #都要调整维度，生成B这个维度
                      "valid_mask":torch.tensor(valid_mask, device=self.device, dtype=torch.float32).unsqueeze(0), #都要调整维度，生成B这个维度
+                     "bbox_size":torch.tensor(bbox_size[None, :],device=self.device, dtype=torch.float32),
                      }
 
         if getattr(self.config, 'box_aware', False):

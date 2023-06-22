@@ -85,6 +85,25 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            "name": "main_nuscenes_mfattn",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "cfgs/M2_Track_nuscene_mf_attn.yaml",
+                "--batch_size",
+                "2",
+                "--epoch",
+                "1"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "main_nuscenes_lidar_radar",
             "type": "python",
             "request": "launch",
